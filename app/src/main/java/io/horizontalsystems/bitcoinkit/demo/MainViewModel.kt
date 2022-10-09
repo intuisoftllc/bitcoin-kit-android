@@ -4,6 +4,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import io.horizontalsystems.bitcoincore.BitcoinCore
 import io.horizontalsystems.bitcoincore.BitcoinCore.KitState
+import io.horizontalsystems.bitcoincore.BitcoinCoreBuilder
 import io.horizontalsystems.bitcoincore.core.Bip
 import io.horizontalsystems.bitcoincore.core.IPluginData
 import io.horizontalsystems.bitcoincore.exceptions.AddressFormatException
@@ -49,10 +50,10 @@ class MainViewModel : ViewModel(), BitcoinKit.Listener {
 
     fun init() {
         //TODO create unique seed phrase,perhaps using shared preferences?
-        val words = "used ugly meat glad balance divorce inner artwork hire invest already piano".split(" ")
+        val words = "yard impulse luxury drive today throw farm pepper survey wreck glass federal".split(" ")
         val passphrase = ""
 
-        bitcoinKit = BitcoinKit(App.instance, words, passphrase, walletId, networkType, syncMode = syncMode, bip = bip)
+        bitcoinKit = BitcoinKit(App.instance, words, passphrase, walletId, networkType, 10,  syncMode, 6, bip)
 
         bitcoinKit.listener = this
 
@@ -92,7 +93,7 @@ class MainViewModel : ViewModel(), BitcoinKit.Listener {
     // BitcoinKit Listener implementations
     //
     override fun onTransactionsUpdate(inserted: List<TransactionInfo>, updated: List<TransactionInfo>) {
-        setTransactionFilterType(transactionFilterType)
+        transactions.postValue(inserted)
     }
 
     override fun onTransactionsDelete(hashes: List<String>) {

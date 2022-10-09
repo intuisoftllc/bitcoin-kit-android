@@ -18,7 +18,6 @@ import com.google.android.material.tabs.TabLayout
 import io.horizontalsystems.bitcoincore.models.TransactionInfo
 import io.horizontalsystems.bitcoincore.models.TransactionInputInfo
 import io.horizontalsystems.bitcoincore.models.TransactionOutputInfo
-import io.horizontalsystems.dashkit.models.DashTransactionInfo
 import io.horizontalsystems.hodler.HodlerOutputData
 import io.horizontalsystems.hodler.HodlerPlugin
 import kotlinx.android.synthetic.main.fragment_transactions.*
@@ -133,15 +132,15 @@ class ViewHolderTransaction(val containerView: View, private val listener: Liste
 
         var text = "#$index"
         text += "\nStatus: ${transactionInfo.status.name}, ${transactionInfo.type.name}"
-        if (transactionInfo is DashTransactionInfo) {
-            text += "\nInstant: ${transactionInfo.instantTx.toString().toUpperCase(Locale.getDefault())}"
-        }
+//        if (transactionInfo is DashTransactionInfo) {
+//            text += "\nInstant: ${transactionInfo.instantTx.toString().toUpperCase(Locale.getDefault())}"
+//        }
 
         text += "\nInputs: ${mapInputs(transactionInfo.inputs)}" +
                 "\nOutputs: ${mapOutputs(transactionInfo.outputs)}" +
                 "\nAmount: $amount" +
                 "\nFee: $fee" +
-                "\nTx hash: ${transactionInfo.transactionHash}" +
+                "\nTx id: ${transactionInfo.transactionHash}" +
                 "\nTx index: ${transactionInfo.transactionIndex}" +
                 "\nBlock: ${transactionInfo.blockHeight}" +
                 "\nTimestamp: ${transactionInfo.timestamp}" +
