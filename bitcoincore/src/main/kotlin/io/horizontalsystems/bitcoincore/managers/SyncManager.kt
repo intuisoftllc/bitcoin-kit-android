@@ -32,6 +32,9 @@ class SyncManager(
             }
         }
 
+    val isRestored: Boolean
+        get() = apiSyncStateManager.restored
+
     private val syncIdle: Boolean
         get() = syncState.let {
             it is KitState.NotSynced && it.exception !is BitcoinCore.StateError.NotStarted

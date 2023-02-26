@@ -1,8 +1,9 @@
 package io.horizontalsystems.bitcoincore.network.peer
 
+import com.intuisoft.plaid.common.coroutines.PlaidScope
+import io.horizontalsystems.bitcoincore.BitcoinCore
 import io.horizontalsystems.bitcoincore.core.IPeerAddressManager
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.UnknownHostException
@@ -13,10 +14,9 @@ class PeerDiscover(private val peerAddressManager: IPeerAddressManager) {
     private val logger = Logger.getLogger("PeerDiscover")
 
     fun lookup(dnsList: List<String>) {
-        logger.info("Lookup peers from DNS seed...")
+        if(BitcoinCore.loggingEnabled)  logger.info("Lookup peers from DNS seed...")
 
-        // todo: launch coroutines for each dns resolve
-        GlobalScope.launch {
+        PlaidScope.applicationScope.launch(Dispatchers.IO) {
             dnsList.forEach { host ->
                 try {
                     val ips = InetAddress
@@ -24,7 +24,7 @@ class PeerDiscover(private val peerAddressManager: IPeerAddressManager) {
                         .filter { it !is Inet6Address }
                         .map { it.hostAddress }
 
-                    logger.info("Fetched ${ips.size} peer addresses from host: $host")
+                    if (BitcoinCore.loggingEnabled) logger.info("Fetched ${ips.size} peer addresses from host: $host")
                     peerAddressManager.addIps(ips)
                 } catch (e: UnknownHostException) {
                     logger.warning("Cannot look up host: $host")

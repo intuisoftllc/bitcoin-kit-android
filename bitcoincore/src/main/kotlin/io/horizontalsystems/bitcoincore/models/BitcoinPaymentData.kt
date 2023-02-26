@@ -1,5 +1,7 @@
 package io.horizontalsystems.bitcoincore.models
 
+import com.intuisoft.plaid.common.util.SimpleCoinNumberFormat
+
 data class BitcoinPaymentData(
         val address: String,
         val version: String? = null,
@@ -10,25 +12,36 @@ data class BitcoinPaymentData(
 
     val uriPaymentAddress: String
         get() {
-            val uriAddress = address
+            var uriAddress = address
+            var seperator = "?"
             version?.let {
-                uriAddress.plus(";version=$version")
+                uriAddress += ";version=$version"
             }
             amount?.let {
-                uriAddress.plus("?amount=$it")
+                uriAddress += "?amount=${SimpleCoinNumberFormat.format(it)}"
+                seperator = "&"
             }
             label?.let {
-                uriAddress.plus("?label=$label")
+                uriAddress += "${seperator}label=$label"
+                seperator = "&"
             }
             message?.let {
-                uriAddress.plus("?message=$message")
+                uriAddress += "${seperator}message=$message"
+                seperator = "&"
             }
             parameters?.let {
                 for ((name, value) in it) {
-                    uriAddress.plus("?$name=$value")
+                    uriAddress += "${seperator}$name=$value"
+                    seperator = "&"
                 }
             }
 
             return uriAddress
         }
+
+    companion object {
+        fun toBitcoinPaymentUri(info: BitcoinPaymentData): String {
+            return "bitcoin:${info.uriPaymentAddress}"
+        }
+    }
 }

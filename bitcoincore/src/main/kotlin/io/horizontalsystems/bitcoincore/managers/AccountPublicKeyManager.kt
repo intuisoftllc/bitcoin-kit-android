@@ -5,6 +5,7 @@ import io.horizontalsystems.bitcoincore.core.IPublicKeyManager
 import io.horizontalsystems.bitcoincore.core.IStorage
 import io.horizontalsystems.bitcoincore.models.PublicKey
 import io.horizontalsystems.bitcoincore.storage.PublicKeyWithUsedState
+import io.horizontalsystems.hdwalletkit.HDWallet
 
 class AccountPublicKeyManager(
     private val storage: IStorage,
@@ -24,6 +25,12 @@ class AccountPublicKeyManager(
         return elements
     }
 
+    override fun masterPublicKey(purpose: HDWallet.Purpose, mainNet: Boolean, passphraseWallet: Boolean) =
+        wallet.masterPublicKey(purpose, mainNet, passphraseWallet)
+
+    override fun fullPublicKeyPath(key: PublicKey): String =
+        wallet.fullPublicKeyPath(key)
+
     @Throws
     override fun receivePublicKey(): PublicKey {
         return getPublicKey(external = true)
@@ -31,6 +38,11 @@ class AccountPublicKeyManager(
 
     override fun usedExternalPublicKeys(change: Boolean): List<PublicKey> {
         return storage.getPublicKeysWithUsedState().filter { it.publicKey.external == !change && it.used }.map { it.publicKey }
+    }
+
+    @Throws
+    override fun receivePublicKeys(): List<PublicKey> {
+        return getPublicKeys(external = true)
     }
 
     @Throws
@@ -104,6 +116,13 @@ class AccountPublicKeyManager(
             .filter { it.external == external }
             .sortedWith(compareBy { it.index })
             .firstOrNull() ?: throw Error.NoUnusedPublicKey
+    }
+
+    @Throws
+    private fun getPublicKeys(external: Boolean): List<PublicKey> {
+        return storage.getPublicKeysUnused()
+            .filter { it.external == external }
+            .sortedWith(compareBy { it.index }) ?: throw Error.NoUnusedPublicKey
     }
 
     companion object {

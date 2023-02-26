@@ -5,8 +5,11 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.util.Log
+import io.horizontalsystems.bitcoincore.BitcoinCore
 import io.horizontalsystems.bitcoincore.core.IConnectionManager
 import io.horizontalsystems.bitcoincore.core.IConnectionManagerListener
+import java.util.logging.Logger
 
 class ConnectionManager(context: Context) : IConnectionManager {
 
@@ -14,6 +17,7 @@ class ConnectionManager(context: Context) : IConnectionManager {
 
     override var listener: IConnectionManagerListener? = null
     override var isConnected: Boolean = false
+    private val logger = Logger.getLogger("ConnectionManager")
 
     private var hasValidInternet = false
     private var hasConnection = false
@@ -27,10 +31,12 @@ class ConnectionManager(context: Context) : IConnectionManager {
         setInitialValues()
         try {
             connectivityManager.unregisterNetworkCallback(callback)
+            connectivityManager.registerNetworkCallback(NetworkRequest.Builder().build(), callback)
         } catch (e: Exception) {
             //was not registered, or already unregistered
         }
-        connectivityManager.registerNetworkCallback(NetworkRequest.Builder().build(), callback)
+        if(BitcoinCore.loggingEnabled)
+            Log.i(ConnectivityManager::class.java.simpleName, "Connections: ${connectivityManager.allNetworkInfo.size}")
     }
 
     override fun onEnterBackground() {
@@ -93,6 +99,7 @@ class ConnectionManager(context: Context) : IConnectionManager {
         val oldValue = isConnected
         isConnected = hasConnection && hasValidInternet
         if (oldValue != isConnected) {
+            if(BitcoinCore.loggingEnabled)  logger.info("Connection state changed: isConnected =  $isConnected")
             listener?.onConnectionChange(isConnected)
         }
     }

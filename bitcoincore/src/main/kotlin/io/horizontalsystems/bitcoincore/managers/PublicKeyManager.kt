@@ -5,6 +5,7 @@ import io.horizontalsystems.bitcoincore.core.IStorage
 import io.horizontalsystems.bitcoincore.core.Wallet
 import io.horizontalsystems.bitcoincore.models.PublicKey
 import io.horizontalsystems.bitcoincore.storage.PublicKeyWithUsedState
+import io.horizontalsystems.hdwalletkit.HDWallet
 
 class PublicKeyManager(
         private val storage: IStorage,
@@ -26,9 +27,22 @@ class PublicKeyManager(
         return elements
     }
 
+    // purpose is ignored since we derive this from the wallet itself
+    override fun masterPublicKey(purpose: HDWallet.Purpose, mainNet: Boolean, passphraseWallet: Boolean) =
+        wallet.masterPublicKey(mainNet, passphraseWallet)
+
     @Throws
     override fun receivePublicKey(): PublicKey {
         return getPublicKey(true)
+    }
+
+    @Throws
+    override fun receivePublicKeys(): List<PublicKey> {
+        return getPublicKeys(true)
+    }
+
+    override fun fullPublicKeyPath(key: PublicKey): String {
+        return wallet.fullPublicKeyPath(key)
     }
 
     @Throws
@@ -73,7 +87,7 @@ class PublicKeyManager(
 
     override fun gapShifts(): Boolean {
         val publicKeys = storage.getPublicKeysWithUsedState()
-        val lastAccount = publicKeys.map { it.publicKey.account }.max() ?: return false
+        val lastAccount = publicKeys.map { it.publicKey.account }.maxOrNull() ?: return false
 
         for (i in 0..lastAccount) {
             if (gapKeysCount(publicKeys.filter { it.publicKey.account == i && it.publicKey.external }) < wallet.gapLimit) {
@@ -121,6 +135,13 @@ class PublicKeyManager(
                 .filter { it.account == 0 && it.external == external }
                 .sortedWith(compareBy { it.index })
                 .firstOrNull() ?: throw Error.NoUnusedPublicKey
+    }
+
+    @Throws
+    private fun getPublicKeys(external: Boolean): List<PublicKey> {
+        return storage.getPublicKeysUnused()
+                .filter { it.account == 0 && it.external == external }
+                .sortedWith(compareBy { it.index }) ?: throw Error.NoUnusedPublicKey
     }
 
     companion object {

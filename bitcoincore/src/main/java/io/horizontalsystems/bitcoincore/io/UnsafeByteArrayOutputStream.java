@@ -85,7 +85,7 @@ public class UnsafeByteArrayOutputStream extends ByteArrayOutputStream {
      * have been copied into it.
      *
      * @return the current contents of this output stream, as a byte array.
-     * @see java.io.ByteArrayOutputStream#size()
+     * @see ByteArrayOutputStream#size()
      */
     @Override
     public byte toByteArray()[] {
@@ -97,7 +97,7 @@ public class UnsafeByteArrayOutputStream extends ByteArrayOutputStream {
      *
      * @return the value of the {@code count} field, which is the number
      *         of valid bytes in this output stream.
-     * @see java.io.ByteArrayOutputStream#count
+     * @see ByteArrayOutputStream#count
      */
     @Override
     public int size() {

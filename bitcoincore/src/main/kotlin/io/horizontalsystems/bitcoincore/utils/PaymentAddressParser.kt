@@ -30,7 +30,7 @@ class PaymentAddressParser(private val validScheme: String, private val removeSc
         }
 
         // check exist params
-        val versionSeparatedParts = parsedString.split(";","?")
+        val versionSeparatedParts = parsedString.split(";","?", "&")
 
         if (versionSeparatedParts.size < 2) {
             address = parsedString

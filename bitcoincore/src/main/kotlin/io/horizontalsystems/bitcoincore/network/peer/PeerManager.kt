@@ -1,10 +1,13 @@
 package io.horizontalsystems.bitcoincore.network.peer
 
+import io.horizontalsystems.bitcoincore.BitcoinCore
 import java.util.concurrent.ConcurrentHashMap
+import java.util.logging.Logger
 
 class PeerManager {
 
     private var peers = ConcurrentHashMap<String, Peer>()
+    private val logger = Logger.getLogger("PeerManager")
 
     val peersCount: Int
         get() = peers.size
@@ -18,6 +21,7 @@ class PeerManager {
     }
 
     fun disconnectAll() {
+        if(BitcoinCore.loggingEnabled)  logger.info("Disconnecting All.")
         peers.values.forEach { it.close() }
         peers.clear()
     }

@@ -124,6 +124,7 @@ class TransactionExtractor(
             try {
                 output.address = addressConverter.convert(pubkeyHash, scriptType).stringValue
             } catch (e: Exception) {
+                println(e.printStackTrace())
             }
         }
     }
