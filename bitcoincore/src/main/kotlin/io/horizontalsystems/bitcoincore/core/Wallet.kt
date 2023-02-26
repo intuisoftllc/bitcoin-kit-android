@@ -25,6 +25,12 @@ class Wallet(private val hdWallet: HDWallet, val gapLimit: Int): IPrivateWallet 
         }
     }
 
+    fun fullPublicKeyPath(key: PublicKey) =
+        hdWallet.privateKey(key.account, key.index, key.external).toString()
+
+    fun masterPublicKey(mainNet: Boolean, passphraseWallet: Boolean) =
+        hdWallet.masterPublicKey(mainNet, passphraseWallet)
+
     override fun privateKey(account: Int, index: Int, external: Boolean): HDKey {
         return hdWallet.privateKey(account, index, external)
     }

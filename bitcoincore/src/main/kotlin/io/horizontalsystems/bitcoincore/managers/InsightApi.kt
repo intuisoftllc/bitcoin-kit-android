@@ -1,5 +1,6 @@
 package io.horizontalsystems.bitcoincore.managers
 
+import io.horizontalsystems.bitcoincore.BitcoinCore
 import io.horizontalsystems.bitcoincore.core.IInitialSyncApi
 import java.util.logging.Logger
 
@@ -8,8 +9,8 @@ class InsightApi(host: String) : IInitialSyncApi {
     private val apiManager = ApiManager(host)
     private val logger = Logger.getLogger("InsightApi")
 
-    override fun getTransactions(addresses: List<String>): List<TransactionItem> {
-        logger.info("Request transactions for ${addresses.size} addresses: [${addresses.first()}, ...]")
+    override fun getAllTransactions(addresses: List<String>): List<TransactionItem> {
+        if(BitcoinCore.loggingEnabled)  logger.info("Request transactions for ${addresses.size} addresses: [${addresses.first()}, ...]")
 
         val transactions = mutableListOf<TransactionItem>()
 
@@ -22,7 +23,7 @@ class InsightApi(host: String) : IInitialSyncApi {
 
     private fun fetchTransactions(addrs: List<String>, txs: MutableList<TransactionItem>, from: Int, to: Int) {
         val joinedAddresses = addrs.joinToString(",")
-        val json = apiManager.doOkHttpGet("addrs/$joinedAddresses/txs?from=$from&to=$to").asObject()
+        val json = apiManager.doOkHttpGet(false, "addrs/$joinedAddresses/txs?from=$from&to=$to").asObject()
 
         val totalItems = json["totalItems"].asInt()
         val receivedTo = json["to"].asInt()

@@ -117,9 +117,7 @@ class BlockSyncer(
             state.iterationHasPartialBlocks = true
         }
 
-        if (state.iterationHasPartialBlocks) {
-            storage.setBlockPartial(block.headerHash)
-        } else {
+        if (!state.iterationHasPartialBlocks) {
             storage.deleteBlockHash(block.headerHash)
         }
 
@@ -136,9 +134,7 @@ class BlockSyncer(
 
         toDelete.chunked(sqliteMaxVariableNumber).forEach {
             val blocksToDelete = storage.getBlocks(hashes = it)
-            val partialBlocksToDelete = blocksToDelete.filter { block -> block.partial }
-
-            blockchain.deleteBlocks(partialBlocksToDelete)
+            blockchain.deleteBlocks(blocksToDelete)
         }
     }
 

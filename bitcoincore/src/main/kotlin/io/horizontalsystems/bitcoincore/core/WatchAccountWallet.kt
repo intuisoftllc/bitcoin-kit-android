@@ -11,6 +11,12 @@ class WatchAccountWallet(private val hdWallet: HDWalletAccountWatch, override va
         return PublicKey(0, index, external, pubKey.publicKey, pubKey.publicKeyHash)
     }
 
+    override fun masterPublicKey(purpose: HDWallet.Purpose, mainNet: Boolean, passphraseWallet: Boolean): String =
+        hdWallet.masterPublicKey(purpose, mainNet, passphraseWallet)
+
+    override fun fullPublicKeyPath(key: PublicKey): String =
+        hdWallet.fullPublicKeyPath(key.index, if(key.external) HDWallet.Chain.EXTERNAL else HDWallet.Chain.INTERNAL)
+
     override fun publicKeys(indices: IntRange, external: Boolean): List<PublicKey> {
         val hdPublicKeys = hdWallet.publicKeys(indices, if (external) HDWallet.Chain.EXTERNAL else HDWallet.Chain.INTERNAL)
 

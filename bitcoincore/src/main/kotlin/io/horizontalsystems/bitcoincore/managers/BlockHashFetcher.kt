@@ -22,7 +22,7 @@ class BlockHashFetcher(
             restoreKeyConverter.keysForApiRestore(it)
         }
         val allAddresses = externalAddresses.flatten() + internalAddresses.flatten()
-        val transactions = initialSyncerApi.getTransactions(allAddresses)
+        val transactions = initialSyncerApi.getAllTransactions(allAddresses)
 
         if (transactions.isEmpty()) {
             return BlockHashesResponse(listOf(), -1, -1)
@@ -68,4 +68,4 @@ class BlockHashFetcherHelper {
 }
 
 data class TransactionItem(val blockHash: String, val blockHeight: Int, val txOutputs: List<TransactionOutputItem>)
-data class TransactionOutputItem(val script: String, val address: String)
+data class TransactionOutputItem(val script: String, val address: String?)

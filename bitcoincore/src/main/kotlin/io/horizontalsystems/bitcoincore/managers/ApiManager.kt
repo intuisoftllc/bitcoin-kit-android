@@ -1,8 +1,11 @@
 package io.horizontalsystems.bitcoincore.managers
 
+import android.util.Log
 import com.eclipsesource.json.Json
 import com.eclipsesource.json.JsonValue
+import io.horizontalsystems.bitcoincore.BitcoinCore
 import io.horizontalsystems.bitcoincore.utils.NetworkUtils
+import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.BufferedOutputStream
@@ -21,7 +24,7 @@ class ApiManager(private val host: String) {
     fun get(resource: String): JsonValue {
         val url = "$host/$resource"
 
-        logger.info("Fetching $url")
+        if(BitcoinCore.loggingEnabled)  logger.info("Fetching $url")
 
         return try {
             URL(url)
@@ -44,7 +47,7 @@ class ApiManager(private val host: String) {
         try {
             val path = "$host/$resource"
 
-            logger.info("Fetching $path")
+            if(BitcoinCore.loggingEnabled)  logger.info("Fetching $path")
 
             val url = URL(path)
             val urlConnection = url.openConnection() as HttpURLConnection
@@ -64,16 +67,20 @@ class ApiManager(private val host: String) {
         }
     }
 
-    fun doOkHttpGet(uri: String): JsonValue {
+    fun doOkHttpGet(safeCall: Boolean, uri: String): JsonValue {
 
         val url = "$host/$uri"
 
         try {
-            val httpClient: OkHttpClient = OkHttpClient.Builder()
-                .apply {
-                    connectTimeout(5000, TimeUnit.MILLISECONDS)
-                    readTimeout(60000, TimeUnit.MILLISECONDS)
-                }.build()
+            val httpClient: OkHttpClient = if (!safeCall)
+                NetworkUtils.getUnsafeOkHttpClient()
+            else {
+                OkHttpClient.Builder()
+                        .apply {
+                            connectTimeout(5000, TimeUnit.MILLISECONDS)
+                            readTimeout(60000, TimeUnit.MILLISECONDS)
+                        }.build()
+            }
 
             httpClient.newCall(Request.Builder().url(url).build())
                     .execute()

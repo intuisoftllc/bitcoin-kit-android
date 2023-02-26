@@ -5,6 +5,7 @@ import io.horizontalsystems.bitcoincore.core.IPublicKeyManager
 import io.horizontalsystems.bitcoincore.core.IStorage
 import io.horizontalsystems.bitcoincore.models.PublicKey
 import io.horizontalsystems.bitcoincore.storage.PublicKeyWithUsedState
+import io.horizontalsystems.hdwalletkit.HDWallet
 
 class AccountPublicKeyManager(
     private val storage: IStorage,
@@ -24,9 +25,20 @@ class AccountPublicKeyManager(
         return elements
     }
 
+    override fun masterPublicKey(purpose: HDWallet.Purpose, mainNet: Boolean, passphraseWallet: Boolean) =
+        wallet.masterPublicKey(purpose, mainNet, passphraseWallet)
+
+    override fun fullPublicKeyPath(key: PublicKey): String =
+        wallet.fullPublicKeyPath(key)
+
     @Throws
     override fun receivePublicKey(): PublicKey {
         return getPublicKey(external = true)
+    }
+
+    @Throws
+    override fun receivePublicKeys(): List<PublicKey> {
+        return getPublicKeys(external = true)
     }
 
     @Throws
@@ -75,7 +87,7 @@ class AccountPublicKeyManager(
         val keys = mutableListOf<PublicKey>()
 
         if (keysCount < wallet.gapLimit) {
-            val lastIndex = publicKeys.maxBy { it.publicKey.index }?.publicKey?.index ?: -1
+            val lastIndex = publicKeys.maxByOrNull { it.publicKey.index }?.publicKey?.index ?: -1
 
             val newKeysStartIndex = lastIndex + 1
             val indices = newKeysStartIndex until (newKeysStartIndex + wallet.gapLimit - keysCount)
@@ -88,7 +100,7 @@ class AccountPublicKeyManager(
     }
 
     private fun gapKeysCount(publicKeys: List<PublicKeyWithUsedState>): Int {
-        return when (val lastUsedKey = publicKeys.filter { it.used }.maxBy { it.publicKey.index }) {
+        return when (val lastUsedKey = publicKeys.filter { it.used }.maxByOrNull { it.publicKey.index }) {
             null -> publicKeys.size
             else -> publicKeys.filter { it.publicKey.index > lastUsedKey.publicKey.index }.size
         }
@@ -100,6 +112,13 @@ class AccountPublicKeyManager(
             .filter { it.external == external }
             .sortedWith(compareBy { it.index })
             .firstOrNull() ?: throw Error.NoUnusedPublicKey
+    }
+
+    @Throws
+    private fun getPublicKeys(external: Boolean): List<PublicKey> {
+        return storage.getPublicKeysUnused()
+            .filter { it.external == external }
+            .sortedWith(compareBy { it.index }) ?: throw Error.NoUnusedPublicKey
     }
 
     companion object {

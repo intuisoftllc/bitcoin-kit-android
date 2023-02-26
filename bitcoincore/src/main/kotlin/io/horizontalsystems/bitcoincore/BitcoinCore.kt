@@ -1,6 +1,17 @@
 package io.horizontalsystems.bitcoincore
 
 import android.content.Context
+import com.intuisoft.plaid.common.coroutines.PlaidScope
+import com.intuisoft.plaid.common.util.Constants.Strings.PEER_STATUS_INFO_1
+import com.intuisoft.plaid.common.util.Constants.Strings.PEER_STATUS_INFO_2
+import com.intuisoft.plaid.common.util.Constants.Strings.PEER_STATUS_INFO_3
+import com.intuisoft.plaid.common.util.Constants.Strings.PEER_STATUS_INFO_4
+import com.intuisoft.plaid.common.util.Constants.Strings.STATUS_INFO_1
+import com.intuisoft.plaid.common.util.Constants.Strings.STATUS_INFO_2
+import com.intuisoft.plaid.common.util.Constants.Strings.STATUS_INFO_3
+import com.intuisoft.plaid.common.util.Constants.Strings.STATUS_INFO_4
+import com.intuisoft.plaid.common.util.Constants.Strings.STATUS_INFO_5
+import com.intuisoft.plaid.common.util.Constants.Strings.STATUS_INFO_6
 import io.horizontalsystems.bitcoincore.blocks.*
 import io.horizontalsystems.bitcoincore.blocks.validators.IBlockValidator
 import io.horizontalsystems.bitcoincore.core.*
@@ -27,6 +38,8 @@ import io.horizontalsystems.hdwalletkit.HDWallet.Purpose
 import io.horizontalsystems.hdwalletkit.HDWalletAccount
 import io.horizontalsystems.hdwalletkit.HDWalletAccountWatch
 import io.reactivex.Single
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.util.*
 import java.util.concurrent.Executor
 import kotlin.math.roundToInt
@@ -50,6 +63,7 @@ class BitcoinCoreBuilder {
     private var confirmationsThreshold = 6
     private var syncMode: BitcoinCore.SyncMode = BitcoinCore.SyncMode.Api()
     private var peerSize = 10
+    private var gapLimit = 20
     private val plugins = mutableListOf<IPlugin>()
     private var handleAddrMessage = true
 
@@ -60,6 +74,11 @@ class BitcoinCoreBuilder {
 
     fun setExtendedKey(extendedKey: HDExtendedKey): BitcoinCoreBuilder {
         this.extendedKey = extendedKey
+        return this
+    }
+
+    fun setGapLimit(gapLimit: Int): BitcoinCoreBuilder {
+        this.gapLimit = gapLimit
         return this
     }
 
@@ -159,7 +178,6 @@ class BitcoinCoreBuilder {
         var multiAccountPublicKeyFetcher: IMultiAccountPublicKeyFetcher? = null
         val publicKeyManager: IPublicKeyManager
         val bloomFilterProvider: IBloomFilterProvider
-        val gapLimit = 20
 
         if (!extendedKey.info.isPublic) {
             when (extendedKey.derivedType) {
@@ -327,11 +345,11 @@ class BitcoinCoreBuilder {
             paymentAddressParser,
             syncManager,
             purpose,
+            extendedKey,
             peerManager,
             dustCalculator,
             pluginManager,
-            connectionManager
-        )
+            connectionManager)
 
         dataProvider.listener = bitcoinCore
         syncManager.listener = bitcoinCore
@@ -422,6 +440,7 @@ class BitcoinCore(
     private val paymentAddressParser: PaymentAddressParser,
     private val syncManager: SyncManager,
     private val purpose: Purpose,
+    private var extendedKey: HDExtendedKey,
     private var peerManager: PeerManager,
     private val dustCalculator: DustCalculator?,
     private val pluginManager: PluginManager,
@@ -448,6 +467,11 @@ class BitcoinCore(
     val inventoryItemsHandlerChain = InventoryItemsHandlerChain()
     val peerTaskHandlerChain = PeerTaskHandlerChain()
 
+    fun getMasterPublicKey(mainNet: Boolean, passphraseWallet: Boolean)
+        = publicKeyManager.masterPublicKey(purpose, mainNet, passphraseWallet)
+
+    fun getPurpose() = purpose
+
     fun addPeerSyncListener(peerSyncListener: IPeerSyncListener): BitcoinCore {
         initialBlockDownload.addPeerSyncListener(peerSyncListener)
         return this
@@ -462,6 +486,8 @@ class BitcoinCore(
         return this
     }
 
+    fun canSendTransaction() = transactionCreator?.canSendTransaction() ?: false
+
     fun addMessageSerializer(messageSerializer: IMessageSerializer): BitcoinCore {
         networkMessageSerializer.add(messageSerializer)
         return this
@@ -473,6 +499,15 @@ class BitcoinCore(
 
     fun addPeerTaskHandler(handler: IPeerTaskHandler) {
         peerTaskHandlerChain.addHandler(handler)
+    }
+
+    fun isAddressValid(address: String) : Boolean {
+        try {
+            addressConverter.convert(address)
+            return true
+        } catch(e: Exception) {
+            return false
+        }
     }
 
     fun addPeerGroupListener(listener: PeerGroup.Listener) {
@@ -489,12 +524,11 @@ class BitcoinCore(
 
     // END: Extending
 
-    var listenerExecutor: Executor = DirectExecutor()
-
     //  DataProvider getters
     val balance get() = dataProvider.balance
     val lastBlockInfo get() = dataProvider.lastBlockInfo
     val syncState get() = syncManager.syncState
+    val isRestored get() = syncManager.isRestored
 
     var listener: Listener? = null
 
@@ -525,23 +559,31 @@ class BitcoinCore(
         connectionManager.onEnterBackground()
     }
 
+    fun getUnspentOutputs() =
+        dataProvider.getUnspentOutputs()
+
     fun transactions(fromUid: String? = null, type: TransactionFilterType? = null, limit: Int? = null): Single<List<TransactionInfo>> {
         return dataProvider.transactions(fromUid, type, limit)
+    }
+
+    fun getAllTransactions(): List<TransactionInfo> {
+        return dataProvider.getAllTransactions()
     }
 
     fun fee(value: Long, address: String? = null, senderPay: Boolean = true, feeRate: Int, pluginData: Map<Byte, IPluginData>): Long {
         return transactionFeeCalculator?.fee(value, feeRate, senderPay, address, pluginData) ?: throw CoreError.ReadOnlyCore
     }
 
-    fun send(
-        address: String,
-        value: Long,
-        senderPay: Boolean = true,
-        feeRate: Int,
-        sortType: TransactionDataSortType,
-        pluginData: Map<Byte, IPluginData>
-    ): FullTransaction {
-        return transactionCreator?.create(address, value, feeRate, senderPay, sortType, pluginData) ?: throw CoreError.ReadOnlyCore
+    fun fee(unspentOutputs: List<UnspentOutput>, value: Long, address: String? = null, senderPay: Boolean = true, feeRate: Int, pluginData: Map<Byte, IPluginData>): Long {
+        return transactionFeeCalculator?.fee(unspentOutputs.map { it.output.value to it.output.address!! }, value, feeRate, senderPay, address, pluginData) ?: 0
+    }
+
+    fun fee(unspentOutput: UnspentOutput, value: Long, address: String? = null, senderPay: Boolean = true, feeRate: Int, pluginData: Map<Byte, IPluginData>): Long {
+        return transactionFeeCalculator?.fee(listOf(unspentOutput.output.value to unspentOutput.output.address!!), value, feeRate, senderPay, address, pluginData) ?: 0
+    }
+
+    fun send(address: String, value: Long, senderPay: Boolean = true, feeRate: Int, sortType: TransactionDataSortType, pluginData: Map<Byte, IPluginData>, createOnly: Boolean): FullTransaction {
+        return transactionCreator?.create(address, value, feeRate, senderPay, sortType, pluginData, createOnly) ?: throw CoreError.ReadOnlyCore
     }
 
     fun send(
@@ -551,17 +593,34 @@ class BitcoinCore(
         senderPay: Boolean = true,
         feeRate: Int,
         sortType: TransactionDataSortType
-    ): FullTransaction {
+    , createOnly: Boolean): FullTransaction {
         val address = addressConverter.convert(hash, scriptType)
-        return transactionCreator?.create(address.string, value, feeRate, senderPay, sortType, mapOf()) ?: throw CoreError.ReadOnlyCore
+        return transactionCreator!!.create(address.string, value, feeRate, senderPay, sortType, mapOf(), createOnly)
     }
 
-    fun redeem(unspentOutput: UnspentOutput, address: String, feeRate: Int, sortType: TransactionDataSortType): FullTransaction {
-        return transactionCreator?.create(unspentOutput, address, feeRate, sortType) ?: throw CoreError.ReadOnlyCore
+    fun redeem(unspentOutput: UnspentOutput, value: Long, address: String, feeRate: Int, sortType: TransactionDataSortType, createOnly: Boolean, ghostBroadcast: Boolean): FullTransaction {
+        return transactionCreator!!.create(listOf(unspentOutput.output.value to unspentOutput.output.address!!), value, address, feeRate, sortType, createOnly, ghostBroadcast)
+    }
+
+    fun broadcast(transaction: FullTransaction): FullTransaction {
+        return transactionCreator?.broadcast(transaction) ?: throw CoreError.ReadOnlyCore
+    }
+
+    fun redeem(unspentOutputs: List<UnspentOutput>, value: Long, address: String, feeRate: Int, sortType: TransactionDataSortType, createOnly: Boolean, ghostBroadcast: Boolean): FullTransaction {
+        return transactionCreator?.create(unspentOutputs.distinct().map { it.output.value to it.output.address!! }, value, address, feeRate, sortType, createOnly, ghostBroadcast) ?: throw CoreError.ReadOnlyCore
     }
 
     fun receiveAddress(): String {
-        return addressConverter.convert(publicKeyManager.receivePublicKey(), purpose.scriptType).string
+        val key = publicKeyManager.receivePublicKey()
+        return addressConverter.convert(key, purpose.scriptType).string
+    }
+
+    fun receiveAddresses(): List<String> {
+        return publicKeyManager.receivePublicKeys().map { addressConverter.convert(it, purpose.scriptType).string }
+    }
+
+    fun fillGap() {
+        publicKeyManager.fillGap()
     }
 
     fun receivePublicKey(): PublicKey {
@@ -574,6 +633,10 @@ class BitcoinCore(
 
     fun getPublicKeyByPath(path: String): PublicKey {
         return publicKeyManager.getPublicKeyByPath(path)
+    }
+
+    fun getFullPublicKeyPath(key: PublicKey): String {
+        return publicKeyManager.fullPublicKeyPath(key)
     }
 
     fun validateAddress(address: String, pluginData: Map<Byte, IPluginData> = mapOf()) {
@@ -607,36 +670,41 @@ class BitcoinCore(
         }
     }
 
+    fun getConnectedPeersCount() = peerManager.connected().size
+
+    fun getPeersCount() = peerManager.connected().size
+
     fun statusInfo(): Map<String, Any> {
         val statusInfo = LinkedHashMap<String, Any>()
 
-        statusInfo["Synced Until"] = lastBlockInfo?.timestamp?.let { Date(it * 1000) } ?: "N/A"
-        statusInfo["Syncing Peer"] = initialBlockDownload.syncPeer?.host ?: "N/A"
-        statusInfo["Derivation"] = purpose.description
-        statusInfo["Sync State"] = syncState.toString()
-        statusInfo["Last Block Height"] = lastBlockInfo?.height ?: "N/A"
+        statusInfo[STATUS_INFO_1] = lastBlockInfo?.timestamp?.let { Date(it * 1000) } ?: "N/A"
+        statusInfo[STATUS_INFO_2] = initialBlockDownload.syncPeer?.host ?: "N/A"
+        statusInfo[STATUS_INFO_3] = purpose.description
+        statusInfo[STATUS_INFO_4] = syncState.toString()
+        statusInfo[STATUS_INFO_5] = lastBlockInfo?.height ?: "N/A"
 
         val peers = LinkedHashMap<String, Any>()
         peerManager.connected().forEachIndexed { index, peer ->
 
-            val peerStatus = LinkedHashMap<String, Any>()
-            peerStatus["Status"] = if (peer.synced) "Synced" else "Not Synced"
-            peerStatus["Host"] = peer.host
-            peerStatus["Best Block"] = peer.announcedLastBlockHeight
+            val peerStatus = HashMap<String, String>()
+            peerStatus[PEER_STATUS_INFO_1] = if (peer.synced) "Synced" else "Not Synced"
+            peerStatus[PEER_STATUS_INFO_2] = peer.host
+            peerStatus[PEER_STATUS_INFO_3] = peer.announcedLastBlockHeight.toString()
 
             peer.tasks.let { peerTasks ->
                 if (peerTasks.isEmpty()) {
-                    peerStatus["tasks"] = "no tasks"
+                    peerStatus[PEER_STATUS_INFO_4] = "no tasks"
                 } else {
-                    val tasks = LinkedHashMap<String, Any>()
+                    val tasks = mutableListOf<String>()
                     peerTasks.forEach { task ->
-                        tasks[task.javaClass.simpleName] = "[${task.state}]"
+//                        tasks.add("${task.javaClass.simpleName} - [${task.state}]")
+                        tasks.add(task.javaClass.simpleName)
                     }
-                    peerStatus["tasks"] = tasks
+                    peerStatus[PEER_STATUS_INFO_4] = tasks.joinToString(", ")
                 }
             }
 
-            peers["Peer ${index + 1}"] = peerStatus
+            peers["$STATUS_INFO_6${index + 1}"] = peerStatus
         }
 
         statusInfo.putAll(peers)
@@ -648,25 +716,25 @@ class BitcoinCore(
     // DataProvider Listener implementations
     //
     override fun onTransactionsUpdate(inserted: List<TransactionInfo>, updated: List<TransactionInfo>) {
-        listenerExecutor.execute {
+        PlaidScope.applicationScope.launch(Dispatchers.IO) {
             listener?.onTransactionsUpdate(inserted, updated)
         }
     }
 
     override fun onTransactionsDelete(hashes: List<String>) {
-        listenerExecutor.execute {
+        PlaidScope.applicationScope.launch(Dispatchers.IO) {
             listener?.onTransactionsDelete(hashes)
         }
     }
 
     override fun onBalanceUpdate(balance: BalanceInfo) {
-        listenerExecutor.execute {
+        PlaidScope.applicationScope.launch(Dispatchers.IO) {
             listener?.onBalanceUpdate(balance)
         }
     }
 
     override fun onLastBlockInfoUpdate(blockInfo: BlockInfo) {
-        listenerExecutor.execute {
+        PlaidScope.applicationScope.launch(Dispatchers.IO) {
             listener?.onLastBlockInfoUpdate(blockInfo)
         }
     }
@@ -675,7 +743,7 @@ class BitcoinCore(
     // IKitStateManagerListener implementations
     //
     override fun onKitStateUpdate(state: KitState) {
-        listenerExecutor.execute {
+        PlaidScope.applicationScope.launch(Dispatchers.IO) {
             listener?.onKitStateUpdate(state)
         }
     }
@@ -688,6 +756,15 @@ class BitcoinCore(
         return transactionFeeCalculator?.let { transactionFeeCalculator ->
             balance.spendable - transactionFeeCalculator.fee(balance.spendable, feeRate, false, address, pluginData)
         } ?: throw CoreError.ReadOnlyCore
+    }
+
+    fun maximumSpendableValue(unspentOutputs: List<UnspentOutput>, address: String?, feeRate: Int, pluginData: Map<Byte, IPluginData>): Long {
+        var maxSpend = 0L
+        unspentOutputs.forEach {
+            maxSpend += it.output.value
+        }
+
+        return maxSpend - transactionFeeCalculator!!.fee(unspentOutputs.map { it.output.value to it.output.address!! }, maxSpend, feeRate, false, address, pluginData)
     }
 
     fun minimumSpendableValue(address: String?): Int {
@@ -708,6 +785,16 @@ class BitcoinCore(
         return dataProvider.getTransaction(hash)
     }
 
+    fun restartIfNoPeersFound() : Boolean {
+        if(peerManager.peersCount == 0) {
+            stop()
+            start()
+            return true
+        }
+
+        return false
+    }
+
     sealed class KitState {
         object Synced : KitState()
         class NotSynced(val exception: Throwable) : KitState()
@@ -721,6 +808,14 @@ class BitcoinCore(
             this is ApiSyncing && other is ApiSyncing -> this.transactions == other.transactions
             else -> false
         }
+
+        fun isSyncing() : Boolean {
+            return this is Syncing || this is ApiSyncing
+        }
+
+        fun hasSynced() = this is Synced
+
+        fun syncPercentage() : Double = if(this is Syncing) progress else 0.0
 
         override fun toString() = when (this) {
             is Synced -> "Synced"
@@ -759,5 +854,8 @@ class BitcoinCore(
         object ReadOnlyCore : CoreError()
     }
 
+    companion object {
+        var loggingEnabled: Boolean = BuildConfig.LOGGING_ENABLED
+    }
 
 }

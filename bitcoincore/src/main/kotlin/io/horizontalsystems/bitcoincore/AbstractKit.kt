@@ -24,6 +24,8 @@ abstract class AbstractKit {
 
     val syncState get() = bitcoinCore.syncState
 
+    val isRestored get() = bitcoinCore.isRestored
+
     val watchAccount: Boolean
         get() = bitcoinCore.watchAccount
 
@@ -35,8 +37,17 @@ abstract class AbstractKit {
         bitcoinCore.stop()
     }
 
+    fun restart() {
+        stop()
+        start()
+    }
+
     fun refresh() {
         bitcoinCore.refresh()
+    }
+
+    fun restartIfNoPeersFound() : Boolean {
+        return bitcoinCore.restartIfNoPeersFound()
     }
 
     fun onEnterForeground() {
@@ -47,8 +58,18 @@ abstract class AbstractKit {
         bitcoinCore.onEnterBackground()
     }
 
+    fun getPurpose() =
+        bitcoinCore.getPurpose()
+
+    fun getUnspentOutputs() =
+        bitcoinCore.getUnspentOutputs()
+
     fun transactions(fromUid: String? = null, type: TransactionFilterType? = null, limit: Int? = null): Single<List<TransactionInfo>> {
         return bitcoinCore.transactions(fromUid, type, limit)
+    }
+
+    fun getAllTransactions(): List<TransactionInfo> {
+        return bitcoinCore.getAllTransactions()
     }
 
     fun getTransaction(hash: String): TransactionInfo? {
@@ -59,35 +80,49 @@ abstract class AbstractKit {
         return bitcoinCore.fee(value, address, senderPay, feeRate, pluginData)
     }
 
-    fun send(
-        address: String,
+    fun fee(unspentOutputs: List<UnspentOutput>, value: Long, address: String? = null, senderPay: Boolean = true, feeRate: Int, pluginData: Map<Byte, IPluginData> = mapOf()): Long {
+        return bitcoinCore.fee(unspentOutputs, value, address, senderPay, feeRate, pluginData)
+    }
+
+    fun send(address: String, value: Long, senderPay: Boolean = true, feeRate: Int, sortType: TransactionDataSortType, pluginData: Map<Byte, IPluginData> = mapOf(), createOnly: Boolean = false): FullTransaction {
+        return bitcoinCore.send(address, value, senderPay, feeRate, sortType, pluginData, createOnly)
+    }
+
+    fun send(hash: ByteArray, scriptType: ScriptType, value: Long, senderPay: Boolean = true, feeRate: Int, sortType: TransactionDataSortType, createOnly: Boolean = false): FullTransaction {
+        return bitcoinCore.send(hash, scriptType, value, senderPay, feeRate, sortType, createOnly)
+    }
+
+    fun redeem(unspentOutput: UnspentOutput,
         value: Long,
-        senderPay: Boolean = true,
+        address: String,
         feeRate: Int,
         sortType: TransactionDataSortType,
-        pluginData: Map<Byte, IPluginData> = mapOf()
-    ): FullTransaction {
-        return bitcoinCore.send(address, value, senderPay, feeRate, sortType, pluginData)
+        ghostBroadcast: Boolean
+    , createOnly: Boolean = false): FullTransaction {
+        return bitcoinCore.redeem(unspentOutput, value, address, feeRate, sortType, createOnly, ghostBroadcast)
     }
 
-    fun send(
-        hash: ByteArray,
-        scriptType: ScriptType,
-        value: Long,
-        senderPay: Boolean = true,
-        feeRate: Int,
-        sortType: TransactionDataSortType
-    ): FullTransaction {
-        return bitcoinCore.send(hash, scriptType, value, senderPay, feeRate, sortType)
+    fun redeem(unspentOutputs: List<UnspentOutput>, value: Long, address: String, feeRate: Int, sortType: TransactionDataSortType = TransactionDataSortType.Shuffle, createOnly: Boolean = false, ghostBroadcast: Boolean = false): FullTransaction {
+        return bitcoinCore.redeem(unspentOutputs, value, address, feeRate, sortType, createOnly, ghostBroadcast)
     }
 
-    fun redeem(unspentOutput: UnspentOutput, address: String, feeRate: Int, sortType: TransactionDataSortType): FullTransaction {
-        return bitcoinCore.redeem(unspentOutput, address, feeRate, sortType)
+    fun broadcast(fullTransaction: FullTransaction) : FullTransaction {
+       return bitcoinCore.broadcast(fullTransaction)
     }
 
     fun receiveAddress(): String {
         return bitcoinCore.receiveAddress()
     }
+
+    fun receiveAddresses(): List<String> {
+        return bitcoinCore.receiveAddresses()
+    }
+
+    fun fillGap() {
+        bitcoinCore.fillGap()
+    }
+
+    fun getMasterPublicKey(mainNet: Boolean, passphraseWallet: Boolean) = bitcoinCore.getMasterPublicKey(mainNet, passphraseWallet)
 
     fun receivePublicKey(): PublicKey {
         return bitcoinCore.receivePublicKey()
@@ -101,13 +136,25 @@ abstract class AbstractKit {
         bitcoinCore.validateAddress(address, pluginData)
     }
 
+    fun validateAddress(key: PublicKey): String {
+        return bitcoinCore.getFullPublicKeyPath(key)
+    }
+
+    fun isAddressValid(address: String) : Boolean =
+        bitcoinCore.isAddressValid(address)
+
     fun parsePaymentAddress(paymentAddress: String): BitcoinPaymentData {
         return bitcoinCore.parsePaymentAddress(paymentAddress)
     }
 
+    fun canSendTransaction() =
+        bitcoinCore.canSendTransaction()
+
     fun showDebugInfo() {
         bitcoinCore.showDebugInfo()
     }
+
+    fun getConnectedPeersCount() = bitcoinCore.getConnectedPeersCount()
 
     fun statusInfo(): Map<String, Any> {
         return bitcoinCore.statusInfo()
@@ -117,12 +164,20 @@ abstract class AbstractKit {
         return bitcoinCore.getPublicKeyByPath(path)
     }
 
+    fun getFullPublicKeyPath(key: PublicKey): String {
+        return bitcoinCore.getFullPublicKeyPath(key)
+    }
+
     fun watchTransaction(filter: TransactionFilter, listener: WatchedTransactionManager.Listener) {
         bitcoinCore.watchTransaction(filter, listener)
     }
 
-    fun maximumSpendableValue(address: String?, feeRate: Int, pluginData: Map<Byte, IPluginData>): Long {
+    fun maximumSpendableValue(address: String?, feeRate: Int, pluginData: Map<Byte, IPluginData> = mapOf()): Long {
         return bitcoinCore.maximumSpendableValue(address, feeRate, pluginData)
+    }
+
+    fun maximumSpendableValue(unspentOutputs: List<UnspentOutput>, address: String?, feeRate: Int, pluginData: Map<Byte, IPluginData> = mapOf()): Long {
+        return bitcoinCore.maximumSpendableValue(unspentOutputs, address, feeRate, pluginData)
     }
 
     fun minimumSpendableValue(address: String?): Int {

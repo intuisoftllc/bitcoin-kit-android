@@ -1,5 +1,6 @@
 package io.horizontalsystems.bitcoincore.core
 
+import com.intuisoft.plaid.common.analytics.events.EventWalletSettingsSetPassphrase
 import io.horizontalsystems.bitcoincore.BitcoinCore
 import io.horizontalsystems.bitcoincore.managers.TransactionItem
 import io.horizontalsystems.bitcoincore.models.*
@@ -8,6 +9,7 @@ import io.horizontalsystems.bitcoincore.storage.*
 import io.horizontalsystems.bitcoincore.transactions.builder.MutableTransaction
 import io.horizontalsystems.bitcoincore.transactions.scripts.ScriptType
 import io.horizontalsystems.hdwalletkit.HDKey
+import io.horizontalsystems.hdwalletkit.HDWallet
 
 interface IStorage {
 
@@ -51,7 +53,6 @@ interface IStorage {
 
     fun addBlock(block: Block)
     fun saveBlock(block: Block)
-    fun setBlockPartial(headerHash: ByteArray)
 
     fun blocksCount(headerHashes: List<ByteArray>? = null): Int
     fun lastBlock(): Block?
@@ -134,7 +135,7 @@ interface ITransactionInfoConverter {
 }
 
 interface IInitialSyncApi {
-    fun getTransactions(addresses: List<String>): List<TransactionItem>
+    fun getAllTransactions(addresses: List<String>): List<TransactionItem>
 }
 
 interface IPeerAddressManager {
@@ -197,13 +198,18 @@ interface IAccountWallet {
 
     fun publicKey(index: Int, external: Boolean): PublicKey
     fun publicKeys(indices: IntRange, external: Boolean): List<PublicKey>
+    fun masterPublicKey(purpose: HDWallet.Purpose, mainNet: Boolean, passphraseWallet: Boolean): String
+    fun fullPublicKeyPath(key: PublicKey): String
 }
 
 interface IPublicKeyManager {
     fun changePublicKey(): PublicKey
     fun receivePublicKey(): PublicKey
+    fun receivePublicKeys(): List<PublicKey>
     fun fillGap()
     fun addKeys(keys: List<PublicKey>)
     fun gapShifts(): Boolean
     fun getPublicKeyByPath(path: String): PublicKey
+    fun masterPublicKey(purpose: HDWallet.Purpose, mainNet: Boolean, passphraseWallet: Boolean): String
+    fun fullPublicKeyPath(key: PublicKey): String
 }

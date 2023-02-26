@@ -1,19 +1,28 @@
 package io.horizontalsystems.bitcoincore.network.peer
 
+import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import com.intuisoft.plaid.common.CommonService
+import com.intuisoft.plaid.common.coroutines.PlaidScope
+import io.horizontalsystems.bitcoincore.BitcoinCore
 import io.horizontalsystems.bitcoincore.crypto.BloomFilter
 import io.horizontalsystems.bitcoincore.network.Network
 import io.horizontalsystems.bitcoincore.network.messages.*
 import io.horizontalsystems.bitcoincore.network.peer.task.PeerTask
+import kotlinx.coroutines.*
 import java.net.InetAddress
 import java.util.concurrent.ExecutorService
+import java.util.concurrent.TimeUnit
+import java.util.logging.Logger
 
 class Peer(
         val host: String,
         private val network: Network,
         private val listener: Listener,
         networkMessageParser: NetworkMessageParser,
-        networkMessageSerializer: NetworkMessageSerializer,
-        executorService: ExecutorService)
+        networkMessageSerializer: NetworkMessageSerializer)
     : PeerConnection.Listener, PeerTask.Listener, PeerTask.Requester {
 
     interface Listener {
@@ -32,16 +41,21 @@ class Peer(
     var connectionTime: Long = 1000
     var tasks = mutableListOf<PeerTask>()
 
+    private val logger = Logger.getLogger("Peer")
     private var connectStartTime: Long? = null
-    private val peerConnection = PeerConnection(host, network, this, executorService, networkMessageParser, networkMessageSerializer)
+    private val peerConnection = PeerConnection(host, network, this, networkMessageParser, networkMessageSerializer)
     private val timer = PeerTimer()
 
     val ready: Boolean
         get() = connected && tasks.isEmpty()
 
-    fun start(peerThreadPool: ExecutorService) {
-        peerThreadPool.execute(peerConnection)
-        connectStartTime = System.currentTimeMillis()
+    @OptIn(DelicateCoroutinesApi::class)
+    fun start() {
+        PlaidScope.applicationScope.launch(NonCancellable + Dispatchers.IO) {
+            peerConnection.run {
+                connectStartTime = System.currentTimeMillis()
+            }
+        }
     }
 
     fun close(disconnectError: Exception? = null) {
@@ -137,6 +151,7 @@ class Peer(
 
     private fun handleVerackMessage() {
         if (connectStartTime == null) {
+            if(BitcoinCore.loggingEnabled)  logger.info("handleVerackMessage() connectStartTime == null.")
             return close()
         }
 

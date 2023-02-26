@@ -1,5 +1,7 @@
 package io.horizontalsystems.bitcoincore.blocks
 
+import com.intuisoft.plaid.common.coroutines.PlaidScope
+import io.horizontalsystems.bitcoincore.BitcoinCore
 import io.horizontalsystems.bitcoincore.core.IBlockSyncListener
 import io.horizontalsystems.bitcoincore.models.InventoryItem
 import io.horizontalsystems.bitcoincore.models.MerkleBlock
@@ -7,6 +9,8 @@ import io.horizontalsystems.bitcoincore.network.peer.*
 import io.horizontalsystems.bitcoincore.network.peer.task.GetBlockHashesTask
 import io.horizontalsystems.bitcoincore.network.peer.task.GetMerkleBlocksTask
 import io.horizontalsystems.bitcoincore.network.peer.task.PeerTask
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.logging.Logger
@@ -26,7 +30,6 @@ class InitialBlockDownload(
     @Volatile
     var syncPeer: Peer? = null
     private var selectNewPeer = false
-    private val peersQueue = Executors.newSingleThreadExecutor()
     private val logger = Logger.getLogger("IBD")
 
     private var minMerkleBlocks = 500.0
@@ -118,7 +121,7 @@ class InitialBlockDownload(
     }
 
     private fun assignNextSyncPeer() {
-        peersQueue.execute {
+        PlaidScope.applicationScope.launch(Dispatchers.IO) {
             if (syncPeer == null) {
                 val notSyncedPeers = peerManager.sorted().filter { !it.synced }
                 if (notSyncedPeers.isEmpty()) {
@@ -129,7 +132,7 @@ class InitialBlockDownload(
                     syncPeer = nonSyncedPeer
                     blockSyncer.downloadStarted()
 
-                    logger.info("Start syncing peer ${nonSyncedPeer.host}")
+                    if(BitcoinCore.loggingEnabled)  logger.info("Start syncing peer ${nonSyncedPeer.host}")
 
                     downloadBlockchain()
                 }
@@ -141,42 +144,64 @@ class InitialBlockDownload(
         syncPeer?.let { peer ->
             if (!peer.ready) return
 
-            if (selectNewPeer) {
-                selectNewPeer = false
-                blockSyncer.downloadCompleted()
-                syncPeer = null
-                assignNextSyncPeer()
-                return
-            }
-
-            val blockHashes = blockSyncer.getBlockHashes()
-            if (blockHashes.isEmpty()) {
-                peer.synced = peer.blockHashesSynced
-            } else {
-                peer.addTask(GetMerkleBlocksTask(blockHashes, this, merkleBlockExtractor, minMerkleBlocks, minTransactions, minReceiveBytes))
-            }
-
-            if (!peer.blockHashesSynced) {
-                val expectedHashesMinCount = max(peer.announcedLastBlockHeight - blockSyncer.localKnownBestBlockHeight, 0)
-                peer.addTask(GetBlockHashesTask(blockSyncer.getBlockLocatorHashes(peer.announcedLastBlockHeight), expectedHashesMinCount))
-            }
-
-            if (peer.synced) {
-                syncedPeers.add(peer)
-
-                blockSyncer.downloadCompleted()
-                peer.sendMempoolMessage()
-                logger.info("Peer synced ${peer.host}")
-                syncPeer = null
-                assignNextSyncPeer()
-                peerSyncListeners.forEach { it.onPeerSynced(peer) }
-
-                // Some peers fail to send InventoryMessage within expected time
-                // and become 'synced' in InitialBlockDownload without sending all of their blocks.
-                // In such case, we assume not all blocks are downloaded
-                if (blockSyncer.localDownloadedBestBlockHeight >= peer.announcedLastBlockHeight) {
-                    listener?.onBlockSyncFinished()
+            try {
+                if (selectNewPeer) {
+                    selectNewPeer = false
+                    blockSyncer.downloadCompleted()
+                    syncPeer = null
+                    assignNextSyncPeer()
+                    return
                 }
+
+                val blockHashes = blockSyncer.getBlockHashes()
+                if (blockHashes.isEmpty()) {
+                    peer.synced = peer.blockHashesSynced
+                } else {
+                    peer.addTask(
+                        GetMerkleBlocksTask(
+                            blockHashes,
+                            this,
+                            merkleBlockExtractor,
+                            minMerkleBlocks,
+                            minTransactions,
+                            minReceiveBytes
+                        )
+                    )
+                }
+
+                if (!peer.blockHashesSynced) {
+                    val expectedHashesMinCount = max(
+                        peer.announcedLastBlockHeight - blockSyncer.localKnownBestBlockHeight,
+                        0
+                    )
+                    peer.addTask(
+                        GetBlockHashesTask(
+                            blockSyncer.getBlockLocatorHashes(peer.announcedLastBlockHeight),
+                            expectedHashesMinCount
+                        )
+                    )
+                }
+
+                if (peer.synced) {
+                    syncedPeers.add(peer)
+
+                    blockSyncer.downloadCompleted()
+                    peer.sendMempoolMessage()
+                    if(BitcoinCore.loggingEnabled)  logger.info("Peer synced ${peer.host}")
+                    syncPeer = null
+                    assignNextSyncPeer()
+                    peerSyncListeners.forEach { it.onPeerSynced(peer) }
+
+                    // Some peers fail to send InventoryMessage within expected time
+                    // and become 'synced' in InitialBlockDownload without sending all of their blocks.
+                    // In such case, we assume not all blocks are downloaded
+                    if (blockSyncer.localDownloadedBestBlockHeight >= peer.announcedLastBlockHeight) {
+                        listener?.onBlockSyncFinished()
+                    }
+                }
+            } catch (e: Throwable) {
+                blockSyncer.downloadFailed()
+                assignNextSyncPeer()
             }
         }
     }

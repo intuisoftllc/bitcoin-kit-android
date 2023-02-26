@@ -1,5 +1,8 @@
 package io.horizontalsystems.bitcoincore.transactions
 
+import com.intuisoft.plaid.common.coroutines.PlaidScope
+import com.intuisoft.plaid.common.util.Constants
+import kotlinx.coroutines.*
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -11,21 +14,25 @@ class TransactionSendTimer(private val period: Long) {
     }
 
     var listener: Listener? = null
-
-    private var executor = Executors.newSingleThreadScheduledExecutor()
-    private var task: ScheduledFuture<*>? = null
+    private var task: Job? = null
 
     @Synchronized
     fun startIfNotRunning() {
         if (task == null) {
-            task = executor.scheduleAtFixedRate({ listener?.onTimePassed() }, period, period, TimeUnit.SECONDS)
+            task = PlaidScope.applicationScope.launch(Dispatchers.IO) {
+                while(true) {
+                    this.ensureActive()
+                    listener?.onTimePassed()
+                    delay(period * Constants.Time.MILLS_PER_SEC)
+                }
+            }
         }
     }
 
     @Synchronized
     fun stop() {
         task?.let {
-            it.cancel(true)
+            it.cancel()
             task = null
         }
     }

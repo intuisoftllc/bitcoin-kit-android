@@ -25,17 +25,13 @@ class DataProvider(
     }
 
     var listener: Listener? = null
-    private val balanceUpdateSubject: PublishSubject<Boolean> = PublishSubject.create()
-    private val balanceSubjectDisposable: Disposable
 
     //  Getters
-    var balance: BalanceInfo = unspentOutputProvider.getBalance()
-        private set(value) {
-            if (value != field) {
-                field = value
-                listener?.onBalanceUpdate(field)
-            }
-        }
+    val balance: BalanceInfo
+        get() = unspentOutputProvider.getBalance()
+
+    fun getUnspentOutputs() =
+        unspentOutputProvider.getSpendableUtxo()
 
     var lastBlockInfo: BlockInfo?
         private set
@@ -44,11 +40,6 @@ class DataProvider(
         lastBlockInfo = storage.lastBlock()?.let {
             blockInfo(it)
         }
-
-        balanceSubjectDisposable = balanceUpdateSubject.debounce(500, TimeUnit.MILLISECONDS)
-                .subscribe {
-                    balance = unspentOutputProvider.getBalance()
-                }
     }
 
     override fun onBlockInsert(block: Block) {
@@ -57,7 +48,7 @@ class DataProvider(
 
             lastBlockInfo = blockInfo
             listener?.onLastBlockInfoUpdate(blockInfo)
-            balanceUpdateSubject.onNext(true)
+            listener?.onBalanceUpdate(balance)
         }
     }
 
@@ -67,16 +58,16 @@ class DataProvider(
                 storage.getFullTransactionInfo(updated.map { TransactionWithBlock(it, block) }).map { transactionInfoConverter.transactionInfo(it) }
         )
 
-        balanceUpdateSubject.onNext(true)
+        listener?.onBalanceUpdate(balance)
     }
 
     override fun onTransactionsDelete(hashes: List<String>) {
         listener?.onTransactionsDelete(hashes)
-        balanceUpdateSubject.onNext(true)
+        listener?.onBalanceUpdate(balance)
     }
 
     fun clear() {
-        balanceSubjectDisposable.dispose()
+        // do nothing
     }
 
     fun transactions(fromUid: String?, type: TransactionFilterType? = null, limit: Int? = null): Single<List<TransactionInfo>> {
@@ -85,6 +76,11 @@ class DataProvider(
             val transactions = storage.getFullTransactionInfo(fromTransaction, type, limit)
             emitter.onSuccess(transactions.map { transactionInfoConverter.transactionInfo(it) })
         }
+    }
+
+    fun getAllTransactions(): List<TransactionInfo> {
+        val transactions = storage.getFullTransactionInfo(null, null, null)
+        return transactions.map { transactionInfoConverter.transactionInfo(it) }
     }
 
     fun getRawTransaction(transactionHash: String): String? {

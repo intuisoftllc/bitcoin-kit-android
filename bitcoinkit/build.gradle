@@ -3,11 +3,10 @@ apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-kapt'
 
 android {
-    compileSdkVersion 29
+    compileSdkVersion 33
 
     defaultConfig {
-        minSdkVersion 23
-        targetSdkVersion 29
+        minSdkVersion 26
         versionCode 1
         versionName "0.4.1"
 
@@ -28,6 +27,7 @@ android {
 
     kotlinOptions { jvmTarget = '1.8' }
     compileOptions {
+        incremental = false
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
@@ -39,9 +39,10 @@ dependencies {
     implementation 'androidx.annotation:annotation:1.1.0'
 
     // Room
-    implementation 'androidx.room:room-runtime:2.2.5'
-    implementation 'androidx.room:room-rxjava2:2.2.5'
-    kapt 'androidx.room:room-compiler:2.2.5'
+    implementation 'androidx.room:room-runtime:2.4.3'
+    implementation 'androidx.room:room-rxjava2:2.4.3'
+    implementation project(path: ':hd-wallet-kit')
+    kapt 'androidx.room:room-compiler:2.4.3'
 
     api project(':bitcoincore')
     api project(':hodler')
@@ -65,6 +66,3 @@ dependencies {
     androidTestImplementation 'com.nhaarman:mockito-kotlin-kt1.1:1.6.0'
 }
 
-repositories {
-    mavenCentral()
-}

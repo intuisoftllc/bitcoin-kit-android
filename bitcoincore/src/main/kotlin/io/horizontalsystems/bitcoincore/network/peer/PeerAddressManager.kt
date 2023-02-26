@@ -1,5 +1,6 @@
 package io.horizontalsystems.bitcoincore.network.peer
 
+import io.horizontalsystems.bitcoincore.BitcoinCore
 import io.horizontalsystems.bitcoincore.core.IPeerAddressManager
 import io.horizontalsystems.bitcoincore.core.IPeerAddressManagerListener
 import io.horizontalsystems.bitcoincore.core.IStorage
@@ -39,7 +40,7 @@ class PeerAddressManager(private val network: Network, private val storage: ISto
     override fun addIps(ips: List<String>) {
         storage.setPeerAddresses(ips.map { PeerAddress(it, 0) })
 
-        logger.info("Added new addresses: ${ips.size}")
+        if(BitcoinCore.loggingEnabled)  logger.info("Added new addresses: ${ips.size}")
 
         listener?.onAddAddress()
     }

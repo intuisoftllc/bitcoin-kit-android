@@ -1,11 +1,18 @@
 package io.horizontalsystems.bitcoincore.managers
 
+import com.intuisoft.plaid.common.coroutines.PlaidScope
+import com.intuisoft.plaid.common.util.extensions.remove
 import io.horizontalsystems.bitcoincore.core.IPublicKeyManager
 import io.horizontalsystems.bitcoincore.core.IStorage
 import io.horizontalsystems.bitcoincore.models.BlockHash
 import io.horizontalsystems.bitcoincore.models.PublicKey
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.schedulers.Schedulers
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.job
+import kotlinx.coroutines.launch
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.logging.Logger
 
 class InitialSyncer(
@@ -23,36 +30,39 @@ class InitialSyncer(
     var listener: Listener? = null
 
     private val logger = Logger.getLogger("InitialSyncer")
-    private val disposables = CompositeDisposable()
+    private var syncJob: Job? = null
 
     fun terminate() {
-        disposables.clear()
+        syncJob?.cancel()
+        syncJob = null
     }
 
     fun sync() {
-        val disposable = blockDiscovery.discoverBlockHashes()
-            .subscribeOn(Schedulers.io())
-            .subscribe(
-                { (publicKeys, blockHashes) ->
-                    val sortedUniqueBlockHashes = blockHashes.distinctBy { it.height }.sortedBy { it.height }
-
-                    handle(publicKeys, sortedUniqueBlockHashes)
-                },
-                {
-                    handleError(it)
-                })
-
-        disposables.add(disposable)
+        syncJob = PlaidScope.applicationScope.launch(Dispatchers.IO) {
+            runDiscovery(this.coroutineContext.job)
+            syncJob = null
+        }
     }
 
-    private fun handle(keys: List<PublicKey>, blockHashes: List<BlockHash>) {
+    private suspend fun runDiscovery(job: Job) {
+        try {
+            blockDiscovery.discoverBlockHashes(job).let { (publicKeys, blockHashes) ->
+                val sortedUniqueBlockHashes = blockHashes.distinctBy { it.height }.sortedBy { it.height }
+                handle(job, publicKeys, sortedUniqueBlockHashes)
+            }
+        } catch (e: Throwable) {
+            handleError(e)
+        }
+    }
+
+    private suspend fun handle(job: Job, keys: List<PublicKey>, blockHashes: List<BlockHash>) {
         publicKeyManager.addKeys(keys)
 
         if (multiAccountPublicKeyFetcher != null) {
             if (blockHashes.isNotEmpty()) {
                 storage.addBlockHashes(blockHashes)
                 multiAccountPublicKeyFetcher.increaseAccount()
-                sync()
+                runDiscovery(job)
             } else {
                 handleSuccess()
             }

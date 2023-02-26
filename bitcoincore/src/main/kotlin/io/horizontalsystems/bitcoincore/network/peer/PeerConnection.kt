@@ -1,26 +1,28 @@
 package io.horizontalsystems.bitcoincore.network.peer
 
+import com.intuisoft.plaid.common.coroutines.PlaidScope
+import io.horizontalsystems.bitcoincore.BitcoinCore
 import io.horizontalsystems.bitcoincore.io.BitcoinInput
 import io.horizontalsystems.bitcoincore.network.Network
 import io.horizontalsystems.bitcoincore.network.messages.IMessage
 import io.horizontalsystems.bitcoincore.network.messages.NetworkMessageParser
 import io.horizontalsystems.bitcoincore.network.messages.NetworkMessageSerializer
 import io.horizontalsystems.bitcoincore.utils.NetworkUtils
+import kotlinx.coroutines.*
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.util.concurrent.ExecutorService
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Logger
 
 class PeerConnection(
         private val host: String,
         private val network: Network,
         private val listener: Listener,
-        private val sendingExecutor: ExecutorService,
         private val networkMessageParser: NetworkMessageParser,
-        private val networkMessageSerializer: NetworkMessageSerializer)
-    : Runnable {
+        private val networkMessageSerializer: NetworkMessageSerializer) {
 
     interface Listener {
         fun socketConnected(address: InetAddress)
@@ -36,11 +38,10 @@ class PeerConnection(
     private var inputStream: InputStream? = null
     private var disconnectError: Exception? = null
 
-    @Volatile
-    private var isRunning = false
+    private var isRunning = AtomicBoolean(false)
 
-    override fun run() {
-        isRunning = true
+    suspend fun run(onRunning: () -> Unit) {
+        isRunning.set(true)
         // connect:
         try {
             socket.connect(InetSocketAddress(host, network.port), 10000)
@@ -50,21 +51,23 @@ class PeerConnection(
             val inputStream = socket.getInputStream()
             val bitcoinInput = BitcoinInput(inputStream)
 
-            logger.info("Socket $host connected.")
+            if(BitcoinCore.loggingEnabled)  logger.info("Socket $host connected.")
 
             listener.socketConnected(socket.inetAddress)
 
             this.inputStream = inputStream
+            onRunning()
+
             // loop:
-            while (isRunning) {
+            while (isRunning.get()) {
                 listener.onTimePeriodPassed()
 
-                Thread.sleep(1000)
+                delay(1000)
 
                 // try receive message:
-                while (isRunning && inputStream.available() > 0) {
+                while (isRunning.get() && inputStream.available() > 0) {
                     val parsedMsg = networkMessageParser.parseMessage(bitcoinInput)
-                    logger.info("<= $parsedMsg")
+                    if(BitcoinCore.loggingEnabled)  logger.info("<= $parsedMsg")
                     listener.onMessage(parsedMsg)
                 }
             }
@@ -83,19 +86,23 @@ class PeerConnection(
 
     @Synchronized
     fun close(error: Exception?) {
-        disconnectError = error
-        isRunning = false
+        synchronized(this) {
+            disconnectError = error
+            isRunning.set(false)
+        }
     }
 
-    @Synchronized
+    @OptIn(DelicateCoroutinesApi::class)
     fun sendMessage(message: IMessage) {
-        sendingExecutor.execute {
-            if (isRunning) {
-                try {
-                    logger.info("=> $message")
-                    outputStream?.write(networkMessageSerializer.serialize(message))
-                } catch (e: Exception) {
-                    close(e)
+        PlaidScope.applicationScope.launch(Dispatchers.IO) {
+            synchronized(this@PeerConnection) {
+                if (isRunning.get()) {
+                    try {
+                        if (BitcoinCore.loggingEnabled) logger.info("=> $message")
+                        outputStream?.write(networkMessageSerializer.serialize(message))
+                    } catch (e: Exception) {
+                        close(e)
+                    }
                 }
             }
         }
