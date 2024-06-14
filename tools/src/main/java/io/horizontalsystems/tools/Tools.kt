@@ -12,7 +12,7 @@ fun main() {
 }
 
 private fun syncCheckpoints() {
-    BuildCheckpoints().sync()
+//    io.horizontalsystems.common.BuildCheckpoints().sync()
     Thread.sleep(5000)
 }
 
@@ -27,5 +27,5 @@ private fun buildCustomCheckpoint() {
             hash = HashUtils.toBytesAsLE("00000000000000003decdbb5f3811eab3148fbc29d3610528eb3b50d9ee5723f")
     ), 296352)
 
-    BuildCheckpoints().build(checkpointBlock)
+//    io.horizontalsystems.common.BuildCheckpoints().build(checkpointBlock)
 }

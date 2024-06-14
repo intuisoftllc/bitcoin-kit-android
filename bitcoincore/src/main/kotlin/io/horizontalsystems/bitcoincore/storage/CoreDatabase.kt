@@ -54,7 +54,6 @@ abstract class CoreDatabase : RoomDatabase() {
                             Migration_16_17,
                             Migration_15_16,
                             Migration_14_15,
-                            Migration_13_14,
                             Migration_12_13,
                             Migration_11_12,
                             Migration_10_11,

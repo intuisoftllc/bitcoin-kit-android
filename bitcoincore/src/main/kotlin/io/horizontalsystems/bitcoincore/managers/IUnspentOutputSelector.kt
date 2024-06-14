@@ -13,6 +13,17 @@ interface IUnspentOutputSelector {
         senderPay: Boolean,
         pluginDataOutputSize: Int
     ): SelectedUnspentOutputInfo
+
+    fun select(
+        outputs: List<UnspentOutput>,
+        value: Long,
+        memo: String?,
+        feeRate: Int,
+        outputScriptType: ScriptType = ScriptType.P2PKH,
+        changeType: ScriptType = ScriptType.P2PKH,
+        senderPay: Boolean,
+        pluginDataOutputSize: Int
+    ): SelectedUnspentOutputInfo
 }
 
 data class SelectedUnspentOutputInfo(
@@ -57,6 +68,29 @@ class UnspentOutputSelectorChain(private val unspentOutputProvider: IUnspentOutp
                     senderPay,
                     pluginDataOutputSize
                 )
+            } catch (e: SendValueErrors) {
+                lastError = e
+            }
+        }
+
+        throw lastError ?: Error()
+    }
+
+    override fun select(
+        unspentOutputs: List<UnspentOutput>,
+        value: Long,
+        memo: String?,
+        feeRate: Int,
+        outputType: ScriptType,
+        changeType: ScriptType,
+        senderPay: Boolean,
+        pluginDataOutputSize: Int
+    ): SelectedUnspentOutputInfo {
+        var lastError: SendValueErrors? = null
+
+        for (selector in concreteSelectors) {
+            try {
+                return selector.select(unspentOutputs, value, memo, feeRate, outputType, changeType, senderPay, pluginDataOutputSize)
             } catch (e: SendValueErrors) {
                 lastError = e
             }

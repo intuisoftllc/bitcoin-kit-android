@@ -29,7 +29,7 @@ class PublicKeyManager(
 
     // purpose is ignored since we derive this from the wallet itself
     override fun masterPublicKey(purpose: HDWallet.Purpose, mainNet: Boolean, passphraseWallet: Boolean) =
-        wallet.masterPublicKey(mainNet, passphraseWallet)
+        wallet.masterPublicKey(purpose, mainNet, passphraseWallet)
 
     @Throws
     override fun receivePublicKey(): PublicKey {

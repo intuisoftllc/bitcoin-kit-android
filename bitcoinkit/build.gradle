@@ -20,8 +20,7 @@ android {
     compileSdk 34
 
     defaultConfig {
-        minSdkVersion 23
-        targetSdkVersion 34
+        minSdkVersion 26
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -39,6 +38,7 @@ android {
     }
 
     compileOptions {
+        incremental = false
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
@@ -51,9 +51,10 @@ dependencies {
     implementation 'androidx.annotation:annotation:1.1.0'
 
     // Room
-    implementation 'androidx.room:room-runtime:2.2.5'
-    implementation 'androidx.room:room-rxjava2:2.2.5'
-    kapt 'androidx.room:room-compiler:2.2.5'
+    implementation 'androidx.room:room-runtime:2.4.3'
+    implementation 'androidx.room:room-rxjava2:2.4.3'
+//    implementation project(path: ':hd-wallet-kit')
+    kapt 'androidx.room:room-compiler:2.4.3'
 
     api project(':bitcoincore')
     api project(':hodler')

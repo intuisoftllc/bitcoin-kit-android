@@ -4,6 +4,7 @@ import io.horizontalsystems.bitcoincore.core.IPluginData
 import io.horizontalsystems.bitcoincore.managers.BloomFilterManager
 import io.horizontalsystems.bitcoincore.models.TransactionDataSortType
 import io.horizontalsystems.bitcoincore.storage.FullTransaction
+import io.horizontalsystems.bitcoincore.storage.FullTransactionInfo
 import io.horizontalsystems.bitcoincore.storage.UnspentOutput
 import io.horizontalsystems.bitcoincore.transactions.builder.MutableTransaction
 import io.horizontalsystems.bitcoincore.transactions.builder.TransactionBuilder
@@ -16,6 +17,15 @@ class TransactionCreator(
     private val transactionSigner: TransactionSigner,
     private val bloomFilterManager: BloomFilterManager
 ) {
+    val canSend: Boolean
+        get() {
+            return try {
+                transactionSender.canSendTransaction()
+                true
+            } catch(t: Throwable) {
+                false
+            }
+        }
 
     @Throws
     fun create(
@@ -27,7 +37,8 @@ class TransactionCreator(
         sortType: TransactionDataSortType,
         unspentOutputs: List<UnspentOutput>?,
         pluginData: Map<Byte, IPluginData>,
-        rbfEnabled: Boolean
+        rbfEnabled: Boolean,
+        broadcast: Boolean = true
     ): FullTransaction {
         val mutableTransaction = builder.buildTransaction(
             toAddress = toAddress,
@@ -41,7 +52,7 @@ class TransactionCreator(
             rbfEnabled = rbfEnabled
         )
 
-        return create(mutableTransaction)
+        return create(mutableTransaction, broadcast)
     }
 
     @Throws
@@ -51,20 +62,25 @@ class TransactionCreator(
         memo: String?,
         feeRate: Int,
         sortType: TransactionDataSortType,
-        rbfEnabled: Boolean
+        rbfEnabled: Boolean,
+        broadcast: Boolean = true
     ): FullTransaction {
         val mutableTransaction = builder.buildTransaction(unspentOutput, toAddress, memo, feeRate, sortType, rbfEnabled)
 
-        return create(mutableTransaction)
+        return create(mutableTransaction, broadcast)
     }
 
-    fun create(mutableTransaction: MutableTransaction): FullTransaction {
+    fun create(mutableTransaction: MutableTransaction, broadcast: Boolean): FullTransaction {
         transactionSigner.sign(mutableTransaction)
 
         val fullTransaction = mutableTransaction.build()
-        processAndSend(fullTransaction)
+        if(broadcast) processAndSend(fullTransaction)
 
         return fullTransaction
+    }
+
+    fun broadcast(transaction: FullTransaction): FullTransaction {
+        return processAndSend(transaction)
     }
 
     private fun processAndSend(transaction: FullTransaction): FullTransaction {

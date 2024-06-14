@@ -67,7 +67,7 @@ class InputWithPreviousOutput(
     val previousOutput: TransactionOutput?
 )
 
-class UnspentOutput(
+data class UnspentOutput(
     @Embedded val output: TransactionOutput,
     @Embedded val publicKey: PublicKey,
     @Embedded val transaction: Transaction,

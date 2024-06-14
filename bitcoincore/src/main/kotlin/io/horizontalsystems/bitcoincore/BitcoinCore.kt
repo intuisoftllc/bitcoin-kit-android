@@ -50,11 +50,14 @@ import io.horizontalsystems.bitcoincore.transactions.TransactionFeeCalculator
 import io.horizontalsystems.bitcoincore.transactions.TransactionSyncer
 import io.horizontalsystems.bitcoincore.transactions.scripts.ScriptType
 import io.horizontalsystems.bitcoincore.utils.AddressConverterChain
-import io.horizontalsystems.bitcoincore.utils.DirectExecutor
 import io.horizontalsystems.bitcoincore.utils.IAddressConverter
 import io.horizontalsystems.bitcoincore.utils.PaymentAddressParser
+import io.horizontalsystems.bitcoinutils.BitcoinScope
+import io.horizontalsystems.hdwalletkit.HDExtendedKey
 import io.horizontalsystems.hdwalletkit.HDWallet.Purpose
 import io.reactivex.Single
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.util.Date
 import java.util.concurrent.Executor
 import kotlin.math.max
@@ -71,7 +74,8 @@ class BitcoinCore(
     private val replacementTransactionBuilder: ReplacementTransactionBuilder?,
     private val paymentAddressParser: PaymentAddressParser,
     private val syncManager: SyncManager,
-    private val purpose: Purpose,
+    val purpose: Purpose,
+    private var extendedKey: HDExtendedKey,
     private var peerManager: PeerManager,
     private val dustCalculator: DustCalculator?,
     private val pluginManager: PluginManager,
@@ -98,6 +102,11 @@ class BitcoinCore(
     val inventoryItemsHandlerChain = InventoryItemsHandlerChain()
     val peerTaskHandlerChain = PeerTaskHandlerChain()
 
+    fun getMasterPublicKey(mainNet: Boolean, passphraseWallet: Boolean)
+            = publicKeyManager.masterPublicKey(purpose, mainNet, passphraseWallet)
+
+    fun getPurpose() = purpose
+
     fun addPeerSyncListener(peerSyncListener: IPeerSyncListener): BitcoinCore {
         initialDownload.addPeerSyncListener(peerSyncListener)
         return this
@@ -112,6 +121,8 @@ class BitcoinCore(
         return this
     }
 
+    fun canSendTransaction() = transactionCreator?.canSend ?: false
+
     fun addMessageSerializer(messageSerializer: IMessageSerializer): BitcoinCore {
         networkMessageSerializer.add(messageSerializer)
         return this
@@ -123,6 +134,15 @@ class BitcoinCore(
 
     fun addPeerTaskHandler(handler: IPeerTaskHandler) {
         peerTaskHandlerChain.addHandler(handler)
+    }
+
+    fun isAddressValid(address: String) : Boolean {
+        try {
+            addressConverter.convert(address)
+            return true
+        } catch(e: Exception) {
+            return false
+        }
     }
 
     fun addPeerGroupListener(listener: PeerGroup.Listener) {
@@ -139,12 +159,11 @@ class BitcoinCore(
 
     // END: Extending
 
-    var listenerExecutor: Executor = DirectExecutor()
-
     //  DataProvider getters
     val balance get() = dataProvider.balance
     val lastBlockInfo get() = dataProvider.lastBlockInfo
     val syncState get() = syncManager.syncState
+    val isRestored get() = syncManager.isRestored
 
     var listener: Listener? = null
 
@@ -169,6 +188,7 @@ class BitcoinCore(
     }
 
     fun refresh() {
+        stop()
         start()
     }
 
@@ -218,7 +238,8 @@ class BitcoinCore(
         sortType: TransactionDataSortType,
         unspentOutputs: List<UnspentOutputInfo>?,
         pluginData: Map<Byte, IPluginData>,
-        rbfEnabled: Boolean
+        rbfEnabled: Boolean,
+        broadcast: Boolean
     ): FullTransaction {
         val outputs = unspentOutputs?.mapNotNull {
             unspentOutputSelector.all.firstOrNull { unspentOutput ->
@@ -234,7 +255,8 @@ class BitcoinCore(
             sortType = sortType,
             unspentOutputs = outputs,
             pluginData = pluginData,
-            rbfEnabled = rbfEnabled
+            rbfEnabled = rbfEnabled,
+            broadcast = broadcast
         ) ?: throw CoreError.ReadOnlyCore
     }
 
@@ -247,7 +269,8 @@ class BitcoinCore(
         feeRate: Int,
         sortType: TransactionDataSortType,
         unspentOutputs: List<UnspentOutputInfo>?,
-        rbfEnabled: Boolean
+        rbfEnabled: Boolean,
+        broadcast: Boolean
     ): FullTransaction {
         val address = addressConverter.convert(hash, scriptType)
         val outputs = unspentOutputs?.mapNotNull {
@@ -264,7 +287,8 @@ class BitcoinCore(
             sortType = sortType,
             unspentOutputs = outputs,
             pluginData = mapOf(),
-            rbfEnabled = rbfEnabled
+            rbfEnabled = rbfEnabled,
+            broadcast = broadcast
         ) ?: throw CoreError.ReadOnlyCore
     }
 
@@ -274,6 +298,10 @@ class BitcoinCore(
 
     fun receiveAddress(): String {
         return addressConverter.convert(publicKeyManager.receivePublicKey(), purpose.scriptType).stringValue
+    }
+
+    fun receiveAddresses(): List<String> {
+        return publicKeyManager.receivePublicKeys().map { addressConverter.convert(it, purpose.scriptType).stringValue }
     }
 
     fun address(publicKey: PublicKey): Address {
@@ -289,6 +317,10 @@ class BitcoinCore(
         }.sortedBy { it.index }
     }
 
+    fun fillGap() {
+        publicKeyManager.fillGap()
+    }
+
     fun receivePublicKey(): PublicKey {
         return publicKeyManager.receivePublicKey()
     }
@@ -299,6 +331,14 @@ class BitcoinCore(
 
     fun getPublicKeyByPath(path: String): PublicKey {
         return publicKeyManager.getPublicKeyByPath(path)
+    }
+
+    fun getFullPublicKeyPath(key: PublicKey): String {
+        return publicKeyManager.fullPublicKeyPath(key)
+    }
+
+    fun broadcast(transaction: FullTransaction): FullTransaction {
+        return transactionCreator?.broadcast(transaction) ?: throw CoreError.ReadOnlyCore
     }
 
     fun validateAddress(address: String, pluginData: Map<Byte, IPluginData> = mapOf()) {
@@ -370,29 +410,41 @@ class BitcoinCore(
         return statusInfo
     }
 
+    fun getAllTransactions(): List<TransactionInfo> {
+        return dataProvider.getAllTransactions()
+    }
+
+    fun fee(unspentOutputs: List<UnspentOutput>, value: Long, address: String? = null, senderPay: Boolean = true, feeRate: Int, pluginData: Map<Byte, IPluginData>): Long {
+        return transactionFeeCalculator?.fee(unspentOutputs, value, feeRate, senderPay, address, pluginData) ?: 0
+    }
+
+    fun getConnectedPeersCount() = peerManager.connected().size
+
+    fun getPeersCount() = peerManager.connected().size
+
     //
     // DataProvider Listener implementations
     //
     override fun onTransactionsUpdate(inserted: List<TransactionInfo>, updated: List<TransactionInfo>) {
-        listenerExecutor.execute {
+        BitcoinScope.applicationScope.launch(Dispatchers.IO) {
             listener?.onTransactionsUpdate(inserted, updated)
         }
     }
 
     override fun onTransactionsDelete(hashes: List<String>) {
-        listenerExecutor.execute {
+        BitcoinScope.applicationScope.launch(Dispatchers.IO) {
             listener?.onTransactionsDelete(hashes)
         }
     }
 
     override fun onBalanceUpdate(balance: BalanceInfo) {
-        listenerExecutor.execute {
+        BitcoinScope.applicationScope.launch(Dispatchers.IO) {
             listener?.onBalanceUpdate(balance)
         }
     }
 
     override fun onLastBlockInfoUpdate(blockInfo: BlockInfo) {
-        listenerExecutor.execute {
+        BitcoinScope.applicationScope.launch(Dispatchers.IO) {
             listener?.onLastBlockInfoUpdate(blockInfo)
         }
     }
@@ -401,7 +453,7 @@ class BitcoinCore(
     // IKitStateManagerListener implementations
     //
     override fun onKitStateUpdate(state: KitState) {
-        listenerExecutor.execute {
+        BitcoinScope.applicationScope.launch(Dispatchers.IO) {
             listener?.onKitStateUpdate(state)
         }
     }
@@ -458,6 +510,15 @@ class BitcoinCore(
         return dataProvider.getTransaction(hash)
     }
 
+    fun refreshIfNoPeersFound() : Boolean {
+        if(peerManager.peersCount == 0) {
+            refresh()
+            return true
+        }
+
+        return false
+    }
+
     fun replacementTransaction(transactionHash: String, minFee: Long, type: ReplacementType): ReplacementTransaction {
         val replacementTransactionBuilder = this.replacementTransactionBuilder ?: throw CoreError.ReadOnlyCore
 
@@ -467,10 +528,10 @@ class BitcoinCore(
         return ReplacementTransaction(mutableTransaction, info, descendantTransactionHashes)
     }
 
-    fun send(replacementTransaction: ReplacementTransaction): FullTransaction {
+    fun send(replacementTransaction: ReplacementTransaction, broadcast: Boolean): FullTransaction {
         val transactionCreator = this.transactionCreator ?: throw CoreError.ReadOnlyCore
 
-        return transactionCreator.create(replacementTransaction.mutableTransaction)
+        return transactionCreator.create(replacementTransaction.mutableTransaction, broadcast)
     }
 
     fun replacementTransactionInfo(transactionHash: String, type: ReplacementType): ReplacementTransactionInfo? {
@@ -482,6 +543,16 @@ class BitcoinCore(
         class NotSynced(val exception: Throwable) : KitState()
         class Syncing(val progress: Double) : KitState()
         class ApiSyncing(val transactions: Int) : KitState()
+
+        val isSyncing: Boolean
+                get() = this is Syncing || this is ApiSyncing
+
+        val hasSynced: Boolean
+            get() = this is Synced
+
+        val syncPercentage : Double
+            get() = if(this is Syncing) progress else 0.0
+
 
         override fun equals(other: Any?) = when {
             this is Synced && other is Synced -> true
@@ -533,4 +604,8 @@ class BitcoinCore(
         class API(val blockchairApi: BlockchairApi): SendType()
     }
 
+
+    companion object {
+        var loggingEnabled: Boolean = BuildConfig.LOGGING_ENABLED
+    }
 }

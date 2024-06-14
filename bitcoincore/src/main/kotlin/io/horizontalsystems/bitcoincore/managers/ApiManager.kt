@@ -2,6 +2,7 @@ package io.horizontalsystems.bitcoincore.managers
 
 import com.eclipsesource.json.Json
 import com.eclipsesource.json.JsonValue
+import io.horizontalsystems.bitcoincore.BitcoinCore
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -23,7 +24,7 @@ class ApiManager(private val host: String) {
     fun get(resource: String): InputStream? {
         val url = "$host/$resource"
 
-        logger.info("Fetching $url")
+        if(BitcoinCore.loggingEnabled) logger.info("Fetching $url")
 
         return try {
             URL(url)
@@ -44,7 +45,7 @@ class ApiManager(private val host: String) {
         try {
             val path = "$host/$resource"
 
-            logger.info("Fetching $path")
+            if(BitcoinCore.loggingEnabled) logger.info("Fetching $path")
 
             val url = URL(path)
             val urlConnection = url.openConnection() as HttpURLConnection

@@ -1,6 +1,6 @@
 package io.horizontalsystems.bitcoincore.models
 
-import com.intuisoft.plaid.common.util.SimpleCoinNumberFormat
+import java.text.DecimalFormat
 
 data class BitcoinPaymentData(
         val address: String,
@@ -18,7 +18,7 @@ data class BitcoinPaymentData(
                 uriAddress += ";version=$version"
             }
             amount?.let {
-                uriAddress += "?amount=${SimpleCoinNumberFormat.format(it)}"
+                uriAddress += "?amount=${format(it)}"
                 seperator = "&"
             }
             label?.let {
@@ -43,5 +43,11 @@ data class BitcoinPaymentData(
         fun toBitcoinPaymentUri(info: BitcoinPaymentData): String {
             return "bitcoin:${info.uriPaymentAddress}"
         }
+
+        fun format(value: Double): String? {
+            val df = DecimalFormat("###,###,###,###,###,###.########")
+            return df.format(value)
+        }
+
     }
 }

@@ -3,6 +3,8 @@ package io.horizontalsystems.bitcoincore.apisync.legacy
 import io.horizontalsystems.bitcoincore.models.BlockHash
 import io.horizontalsystems.bitcoincore.models.PublicKey
 import io.reactivex.Single
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 
 class BlockHashDiscoveryBatch(
     private val blockHashScanner: BlockHashScanner,
@@ -10,21 +12,17 @@ class BlockHashDiscoveryBatch(
     private val maxHeight: Int,
     private val gapLimit: Int
 ) {
-    fun discoverBlockHashes(): Single<Pair<List<PublicKey>, List<BlockHash>>> {
-        return Single.create { emitter ->
-            try {
-                emitter.onSuccess(fetchRecursive())
-            } catch (e: Exception) {
-                emitter.tryOnError(e)
-            }
-        }
+    suspend fun discoverBlockHashes(job: Job): Pair<List<PublicKey>, List<BlockHash>> {
+        return fetchRecursive(job)
     }
 
-    private fun fetchRecursive(
+    private suspend fun fetchRecursive(
+        job: Job,
         blockHashes: List<BlockHash> = listOf(),
         externalBatchInfo: KeyBlockHashBatchInfo = KeyBlockHashBatchInfo(),
         internalBatchInfo: KeyBlockHashBatchInfo = KeyBlockHashBatchInfo()
     ): Pair<List<PublicKey>, List<BlockHash>> {
+        job.ensureActive()
 
         val externalCount = gapLimit - externalBatchInfo.prevCount + externalBatchInfo.prevLastUsedIndex + 1
         val internalCount = gapLimit - internalBatchInfo.prevCount + internalBatchInfo.prevLastUsedIndex + 1
@@ -57,7 +55,7 @@ class BlockHashDiscoveryBatch(
                     fetchResponse.internalLastUsedIndex,
                     internalBatchInfo.startIndex + internalCount
                 )
-                fetchRecursive(resultBlockHashes, externalBatch, internalBatch)
+                fetchRecursive(job, resultBlockHashes, externalBatch, internalBatch)
             }
         }
     }

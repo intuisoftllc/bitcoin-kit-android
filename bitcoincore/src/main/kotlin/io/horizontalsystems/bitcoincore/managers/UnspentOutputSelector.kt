@@ -13,7 +13,7 @@ class UnspentOutputSelector(
 ) : IUnspentOutputSelector {
 
     val all: List<UnspentOutput>
-        get() = unspentOutputProvider.getSpendableUtxo()
+        get() = unspentOutputProvider.getSpendableUtxo().map { it.copy() }
 
     @Throws(SendValueErrors::class)
     override fun select(
@@ -60,7 +60,45 @@ class UnspentOutputSelector(
                 lastError = error
             }
         }
+
         throw lastError ?: SendValueErrors.InsufficientUnspentOutputs
     }
 
+    override fun select(
+        outputs: List<UnspentOutput>,
+        value: Long,
+        memo: String?,
+        feeRate: Int,
+        outputScriptType: ScriptType,
+        changeType: ScriptType,
+        senderPay: Boolean,
+        pluginDataOutputSize: Int
+    ): SelectedUnspentOutputInfo {
+        // check if value is not dust. recipientValue may be less, but not more
+        if (value < dustCalculator.dust(outputScriptType)) {
+            throw SendValueErrors.Dust
+        }
+
+        val params = UnspentOutputQueue.Parameters(
+            value = value,
+            senderPay = senderPay,
+            memo = memo,
+            fee = feeRate,
+            outputsLimit = outputsLimit,
+            outputScriptType = outputScriptType,
+            changeType = changeType,
+            pluginDataOutputSize = pluginDataOutputSize
+        )
+        val queue = UnspentOutputQueue(params, calculator, dustCalculator)
+        var lastError: SendValueErrors?
+        queue.set(outputs)
+
+        try {
+            return queue.calculate()
+        } catch (error: SendValueErrors) {
+            lastError = error
+        }
+
+        throw lastError ?: SendValueErrors.InsufficientUnspentOutputs
+    }
 }

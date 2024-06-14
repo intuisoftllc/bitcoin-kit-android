@@ -28,7 +28,6 @@ class TransactionBuilder(
         recipientSetter.setRecipient(mutableTransaction, toAddress, value, pluginData, false, memo)
         inputSetter.setInputs(mutableTransaction, feeRate, senderPay, unspentOutputs, sortType, rbfEnabled)
         lockTimeSetter.setLockTime(mutableTransaction)
-
         outputSetter.setOutputs(mutableTransaction, sortType)
 
         return mutableTransaction

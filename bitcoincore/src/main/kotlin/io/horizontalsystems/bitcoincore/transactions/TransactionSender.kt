@@ -27,6 +27,7 @@ class TransactionSender(
     private val retriesPeriod: Int = 60
 ) : IPeerTaskHandler, TransactionSendTimer.Listener {
 
+    @Synchronized
     fun sendPendingTransactions() {
         try {
             val transactions = transactionSyncer.getNewTransactions()
@@ -62,7 +63,7 @@ class TransactionSender(
     private fun getTransactionsToSend(transactions: List<FullTransaction>): List<FullTransaction> {
         return transactions.filter { transaction ->
             storage.getSentTransaction(transaction.header.hash)?.let { sentTransaction ->
-                sentTransaction.retriesCount < maxRetriesCount && sentTransaction.lastSendTime < (System.currentTimeMillis() - retriesPeriod * 1000)
+                sentTransaction.retriesCount < maxRetriesCount
             } ?: true
         }
     }

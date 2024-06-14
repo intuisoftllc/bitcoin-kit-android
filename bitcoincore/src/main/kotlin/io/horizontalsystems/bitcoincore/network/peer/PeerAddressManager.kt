@@ -8,7 +8,7 @@ import io.horizontalsystems.bitcoincore.models.PeerAddress
 import io.horizontalsystems.bitcoincore.network.Network
 import java.util.logging.Logger
 
-class PeerAddressManager(private val network: Network, private val storage: IStorage) : IPeerAddressManager {
+class PeerAddressManager(private val network: Network, private val storage: IStorage?) : IPeerAddressManager {
 
     override var listener: IPeerAddressManagerListener? = null
 
@@ -38,7 +38,7 @@ class PeerAddressManager(private val network: Network, private val storage: ISto
     }
 
     override fun addIps(ips: List<String>) {
-        storage.setPeerAddresses(ips.map { PeerAddress(it, 0) })
+        storage?.setPeerAddresses(ips.map { PeerAddress(it, 0) })
 
         if(BitcoinCore.loggingEnabled)  logger.info("Added new addresses: ${ips.size}")
 
@@ -48,7 +48,7 @@ class PeerAddressManager(private val network: Network, private val storage: ISto
     override fun markFailed(ip: String) {
         state.remove(ip)
 
-        storage.deletePeerAddress(ip)
+        storage?.deletePeerAddress(ip)
     }
 
     override fun markSuccess(ip: String) {
@@ -56,11 +56,11 @@ class PeerAddressManager(private val network: Network, private val storage: ISto
     }
 
     override fun markConnected(peer: Peer) {
-        storage.markConnected(peer.host, peer.connectionTime)
+        storage?.markConnected(peer.host, peer.connectionTime)
     }
 
     private fun getLeastScoreFastestPeer(): PeerAddress? {
-        return storage.getLeastScoreFastestPeerAddressExcludingIps(state.getUsedPeers())
+        return storage?.getLeastScoreFastestPeerAddressExcludingIps(state.getUsedPeers())
     }
 
     private class State {

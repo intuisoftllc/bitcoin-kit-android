@@ -1,5 +1,6 @@
 package io.horizontalsystems.bitcoincore.apisync.legacy
 
+import io.horizontalsystems.bitcoincore.BitcoinCore
 import io.horizontalsystems.bitcoincore.core.IApiSyncer
 import io.horizontalsystems.bitcoincore.core.IApiSyncerListener
 import io.horizontalsystems.bitcoincore.core.IPublicKeyManager
@@ -7,8 +8,13 @@ import io.horizontalsystems.bitcoincore.core.IStorage
 import io.horizontalsystems.bitcoincore.managers.ApiSyncStateManager
 import io.horizontalsystems.bitcoincore.models.BlockHash
 import io.horizontalsystems.bitcoincore.models.PublicKey
+import io.horizontalsystems.bitcoinutils.BitcoinScope
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.schedulers.Schedulers
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.job
+import kotlinx.coroutines.launch
 import java.util.logging.Logger
 
 class ApiSyncer(
@@ -25,30 +31,29 @@ class ApiSyncer(
     override var listener: IApiSyncerListener? = null
 
     private val logger = Logger.getLogger("ApiSyncer")
-    private val disposables = CompositeDisposable()
+    private var syncJob: Job? = null
 
     override fun terminate() {
-        disposables.clear()
+        syncJob?.cancel()
+        syncJob = null
     }
 
     override fun sync() {
-        val disposable = blockHashDiscovery.discoverBlockHashes()
-            .subscribeOn(Schedulers.io())
-            .observeOn(Schedulers.io())
-            .subscribe(
-                { (publicKeys, blockHashes) ->
+        syncJob = BitcoinScope.applicationScope.launch(Dispatchers.IO) {
+            try {
+                val job = this.coroutineContext.job
+                    blockHashDiscovery.discoverBlockHashes(job).let { (publicKeys, blockHashes) ->
                     val sortedUniqueBlockHashes = blockHashes.distinctBy { it.height }.sortedBy { it.height }
-
-                    handle(publicKeys, sortedUniqueBlockHashes)
-                },
-                {
-                    handleError(it)
-                })
-
-        disposables.add(disposable)
+                    handle(job, publicKeys, sortedUniqueBlockHashes)
+                }
+            } catch (e: Throwable) {
+                handleError(e)
+            }
+            syncJob = null
+        }
     }
 
-    private fun handle(keys: List<PublicKey>, blockHashes: List<BlockHash>) {
+    private fun handle(job: Job, keys: List<PublicKey>, blockHashes: List<BlockHash>) {
         publicKeyManager.addKeys(keys)
 
         if (multiAccountPublicKeyFetcher != null) {
@@ -71,8 +76,7 @@ class ApiSyncer(
     }
 
     private fun handleError(error: Throwable) {
-        logger.severe("Initial Sync Error: ${error.message}")
-
+        if(BitcoinCore.loggingEnabled) logger.severe("Initial Sync Error: ${error.message}")
         listener?.onSyncFailed(error)
     }
 }

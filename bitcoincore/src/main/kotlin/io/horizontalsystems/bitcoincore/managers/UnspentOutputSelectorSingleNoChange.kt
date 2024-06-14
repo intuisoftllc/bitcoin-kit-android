@@ -11,6 +11,66 @@ class UnspentOutputSelectorSingleNoChange(
     private val unspentOutputProvider: IUnspentOutputProvider
 ) : IUnspentOutputSelector {
 
+    private fun selectOutput(
+        outputs: List<UnspentOutput>,
+        value: Long,
+        memo: String?,
+        feeRate: Int,
+        outputScriptType: ScriptType,
+        changeType: ScriptType,
+        senderPay: Boolean,
+        pluginDataOutputSize: Int
+    ): SelectedUnspentOutputInfo {
+        if (outputs.isEmpty()) {
+            throw SendValueErrors.EmptyOutputs
+        }
+
+        if (outputs.any { it.output.failedToSpend }) {
+            throw SendValueErrors.HasOutputFailedToSpend
+        }
+
+        val params = UnspentOutputQueue.Parameters(
+            value = value,
+            senderPay = senderPay,
+            memo = memo,
+            fee = feeRate,
+            outputsLimit = null,
+            outputScriptType = outputScriptType,
+            changeType = changeType,
+            pluginDataOutputSize = pluginDataOutputSize
+        )
+        val queue = UnspentOutputQueue(params, calculator, dustCalculator)
+
+        //  try to find 1 unspent output with exactly matching value
+        for (unspentOutput in outputs) {
+            queue.set(listOf(unspentOutput))
+
+            try {
+                val info = queue.calculate()
+                if (info.changeValue == null) {
+                    return info
+                }
+            } catch (error: SendValueErrors) {
+                //  ignore
+            }
+        }
+
+        throw SendValueErrors.NoSingleOutput
+    }
+
+    override fun select(
+        outputs: List<UnspentOutput>,
+        value: Long,
+        memo: String?,
+        feeRate: Int,
+        outputScriptType: ScriptType,
+        changeType: ScriptType,
+        senderPay: Boolean,
+        pluginDataOutputSize: Int
+    ): SelectedUnspentOutputInfo {
+        return selectOutput(outputs, value, memo, feeRate, outputScriptType, changeType, senderPay, pluginDataOutputSize)
+    }
+
     override fun select(
         value: Long,
         memo: String?,
@@ -32,40 +92,6 @@ class UnspentOutputSelectorSingleNoChange(
                 it.output.value
             })
 
-        if (sortedOutputs.isEmpty()) {
-            throw SendValueErrors.EmptyOutputs
-        }
-
-        if (sortedOutputs.any { it.output.failedToSpend }) {
-            throw SendValueErrors.HasOutputFailedToSpend
-        }
-
-        val params = UnspentOutputQueue.Parameters(
-            value = value,
-            senderPay = senderPay,
-            memo = memo,
-            fee = feeRate,
-            outputsLimit = null,
-            outputScriptType = outputScriptType,
-            changeType = changeType,
-            pluginDataOutputSize = pluginDataOutputSize
-        )
-        val queue = UnspentOutputQueue(params, calculator, dustCalculator)
-
-        //  try to find 1 unspent output with exactly matching value
-        for (unspentOutput in sortedOutputs) {
-            queue.set(listOf(unspentOutput))
-
-            try {
-                val info = queue.calculate()
-                if (info.changeValue == null) {
-                    return info
-                }
-            } catch (error: SendValueErrors) {
-                //  ignore
-            }
-        }
-
-        throw SendValueErrors.NoSingleOutput
+        return selectOutput(sortedOutputs, value, memo, feeRate, outputScriptType, changeType, senderPay, pluginDataOutputSize)
     }
 }

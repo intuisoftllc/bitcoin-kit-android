@@ -28,6 +28,7 @@ import io.horizontalsystems.bitcoincore.storage.UnspentOutput
 import io.horizontalsystems.bitcoincore.transactions.builder.MutableTransaction
 import io.horizontalsystems.bitcoincore.transactions.scripts.ScriptType
 import io.horizontalsystems.hdwalletkit.HDKey
+import io.horizontalsystems.hdwalletkit.HDWallet
 
 interface IStorage {
 
@@ -73,7 +74,6 @@ interface IStorage {
 
     fun addBlock(block: Block)
     fun saveBlock(block: Block)
-    fun setBlockPartial(headerHash: ByteArray)
 
     fun blocksCount(headerHashes: List<ByteArray>? = null): Int
     fun lastBlock(): Block?
@@ -250,14 +250,19 @@ interface IAccountWallet {
 
     fun publicKey(index: Int, external: Boolean): PublicKey
     fun publicKeys(indices: IntRange, external: Boolean): List<PublicKey>
+    fun masterPublicKey(purpose: HDWallet.Purpose, mainNet: Boolean, passphraseWallet: Boolean): String
+    fun fullPublicKeyPath(key: PublicKey): String
 }
 
 interface IPublicKeyManager {
     fun changePublicKey(): PublicKey
     fun receivePublicKey(): PublicKey
+    fun receivePublicKeys(): List<PublicKey>
     fun usedExternalPublicKeys(change: Boolean): List<PublicKey>
     fun fillGap()
     fun addKeys(keys: List<PublicKey>)
     fun gapShifts(): Boolean
     fun getPublicKeyByPath(path: String): PublicKey
+    fun masterPublicKey(purpose: HDWallet.Purpose, mainNet: Boolean, passphraseWallet: Boolean): String
+    fun fullPublicKeyPath(key: PublicKey): String
 }

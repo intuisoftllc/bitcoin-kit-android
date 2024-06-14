@@ -1,5 +1,6 @@
 package io.horizontalsystems.bitcoincore.network.peer
 
+import io.horizontalsystems.bitcoincore.BitcoinCore
 import io.horizontalsystems.bitcoincore.core.IConnectionManager
 import io.horizontalsystems.bitcoincore.core.IPeerAddressManager
 import io.horizontalsystems.bitcoincore.core.IPeerAddressManagerListener
@@ -45,8 +46,6 @@ class PeerGroup(
 
     private val logger = Logger.getLogger("PeerGroup")
     private val peerGroupListeners = mutableListOf<Listener>()
-    private val executorService = Executors.newCachedThreadPool()
-    private val peerThreadPool = Executors.newCachedThreadPool()
 
     private val acceptableBlockHeightDifference = 50_000
     private var peerCountToConnectMax = 100
@@ -81,6 +80,11 @@ class PeerGroup(
         peerGroupListeners.add(listener)
     }
 
+    fun arePeersReady() : Boolean {
+        return peerManager.readyPears().size >= 2
+                && peerManager.hasSyncedPeer()
+    }
+
     //
     // PeerListener implementations
     //
@@ -100,19 +104,19 @@ class PeerGroup(
 
         when (e) {
             null -> {
-                logger.info("Peer ${peer.host} disconnected.")
+                if(BitcoinCore.loggingEnabled) logger.info("Peer ${peer.host} disconnected.")
                 hostManager.markSuccess(peer.host)
             }
 
             is PeerTimer.Error.Timeout -> {
-                logger.warning("Peer ${peer.host} disconnected. Warning: ${e.javaClass.simpleName}, ${e.message}.")
+                if(BitcoinCore.loggingEnabled) logger.warning("Peer ${peer.host} disconnected. Warning: ${e.javaClass.simpleName}, ${e.message}.")
                 // since the peer can be normally interacted after awhile we should not remove it from list
                 // that is why we mark it as disconnected with no error
                 hostManager.markSuccess(peer.host)
             }
 
             else -> {
-                logger.warning("Peer ${peer.host} disconnected. Error: ${e.javaClass.simpleName}, ${e.message}.")
+                if(BitcoinCore.loggingEnabled) logger.warning("Peer ${peer.host} disconnected. Error: ${e.javaClass.simpleName}, ${e.message}.")
                 hostManager.markFailed(peer.host)
             }
         }
@@ -185,11 +189,11 @@ class PeerGroup(
 
         for (i in peerManager.peersCount until peerCountToHold) {
             val ip = hostManager.getIp() ?: break
-            val peer = Peer(ip, network, this, networkMessageParser, networkMessageSerializer, executorService)
+            val peer = Peer(ip, network, this, networkMessageParser, networkMessageSerializer)
             peerCountConnected += 1
             peerGroupListeners.forEach { it.onPeerCreate(peer) }
             peerManager.add(peer)
-            peer.start(peerThreadPool)
+            peer.start()
         }
     }
 

@@ -142,6 +142,7 @@ class BitcoinCoreBuilder {
     private var confirmationsThreshold = 6
     private var syncMode: BitcoinCore.SyncMode = BitcoinCore.SyncMode.Api()
     private var peerSize = 10
+    private var gapLimit = 20
     private val plugins = mutableListOf<IPlugin>()
     private var handleAddrMessage = true
     private var sendType: BitcoinCore.SendType = BitcoinCore.SendType.P2P
@@ -153,6 +154,11 @@ class BitcoinCoreBuilder {
 
     fun setExtendedKey(extendedKey: HDExtendedKey?): BitcoinCoreBuilder {
         this.extendedKey = extendedKey
+        return this
+    }
+
+    fun setGapLimit(gapLimit: Int): BitcoinCoreBuilder {
+        this.gapLimit = gapLimit
         return this
     }
 
@@ -247,7 +253,7 @@ class BitcoinCoreBuilder {
 
     fun build(): BitcoinCore {
         val context = checkNotNull(this.context)
-        val extendedKey = this.extendedKey
+        val extendedKey = checkNotNull(this.extendedKey)
         val watchAddressPublicKey = this.watchAddressPublicKey
         val purpose = checkNotNull(this.purpose)
         val network = checkNotNull(this.network)
@@ -277,7 +283,6 @@ class BitcoinCoreBuilder {
         var multiAccountPublicKeyFetcher: IMultiAccountPublicKeyFetcher? = null
         val publicKeyManager: IPublicKeyManager
         val bloomFilterProvider: IBloomFilterProvider
-        val gapLimit = 20
 
         if (watchAddressPublicKey != null) {
             storage.savePublicKeys(listOf(watchAddressPublicKey))
@@ -516,6 +521,7 @@ class BitcoinCoreBuilder {
             paymentAddressParser,
             syncManager,
             purpose,
+            extendedKey,
             peerManager,
             dustCalculator,
             pluginManager,

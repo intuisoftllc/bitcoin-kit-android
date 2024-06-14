@@ -10,6 +10,7 @@ android {
         targetSdkVersion 34
 
         consumerProguardFiles 'consumer-rules.pro'
+        buildConfigField("Boolean", "LOGGING_ENABLED", "false")
     }
 
     buildTypes {
@@ -31,8 +32,4 @@ dependencies {
 
     implementation project(':bitcoincore')
     implementation project(':bitcoinkit')
-    implementation project(':dashkit')
-    implementation project(':bitcoincashkit')
-    implementation project(':litecoinkit')
-    implementation project(':ecashkit')
 }

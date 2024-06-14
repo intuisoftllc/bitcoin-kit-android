@@ -2,6 +2,7 @@ package io.horizontalsystems.bitcoincore.apisync
 
 import com.eclipsesource.json.Json
 import com.eclipsesource.json.JsonObject
+import io.horizontalsystems.bitcoincore.BitcoinCore
 import io.horizontalsystems.bitcoincore.apisync.model.AddressItem
 import io.horizontalsystems.bitcoincore.apisync.model.TransactionItem
 import io.horizontalsystems.bitcoincore.core.IApiTransactionProvider
@@ -17,11 +18,11 @@ class BCoinApi(host: String) : IApiTransactionProvider {
             this["addresses"] = Json.array(*addresses.toTypedArray())
         }
 
-        logger.info("Request transactions for ${addresses.size} addresses: [${addresses.first()}, ...]")
+        if(BitcoinCore.loggingEnabled) logger.info("Request transactions for ${addresses.size} addresses: [${addresses.first()}, ...]")
 
         val response = apiManager.post("tx/address", requestData.toString()).asArray()
 
-        logger.info("Got ${response.size()} transactions for requested addresses")
+        if(BitcoinCore.loggingEnabled) logger.info("Got ${response.size()} transactions for requested addresses")
 
         val transactions = mutableListOf<TransactionItem>()
 

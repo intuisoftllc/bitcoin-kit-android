@@ -1,6 +1,5 @@
 package io.horizontalsystems.bitcoincore.network.peer
 
-import com.intuisoft.plaid.common.coroutines.PlaidScope
 import io.horizontalsystems.bitcoincore.BitcoinCore
 import io.horizontalsystems.bitcoincore.io.BitcoinInput
 import io.horizontalsystems.bitcoincore.network.Network
@@ -8,6 +7,7 @@ import io.horizontalsystems.bitcoincore.network.messages.IMessage
 import io.horizontalsystems.bitcoincore.network.messages.NetworkMessageParser
 import io.horizontalsystems.bitcoincore.network.messages.NetworkMessageSerializer
 import io.horizontalsystems.bitcoincore.utils.NetworkUtils
+import io.horizontalsystems.bitcoinutils.BitcoinScope
 import kotlinx.coroutines.*
 import java.io.InputStream
 import java.io.OutputStream
@@ -94,7 +94,7 @@ class PeerConnection(
 
     @OptIn(DelicateCoroutinesApi::class)
     fun sendMessage(message: IMessage) {
-        PlaidScope.applicationScope.launch(Dispatchers.IO) {
+        BitcoinScope.applicationScope.launch(Dispatchers.IO) {
             synchronized(this@PeerConnection) {
                 if (isRunning.get()) {
                     try {
